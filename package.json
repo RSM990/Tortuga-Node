@@ -1,0 +1,29 @@
+{
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "mongodb": "^6.15.0",
+    "mongoose": "^8.13.0"
+  },
+  "name": "tortuga-node",
+  "version": "1.0.0",
+  "description": "The backend application for the Tortuga application",
+  "main": "app.js",
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "nodemon app.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RSM990/Tortuga-Node.git"
+  },
+  "author": "Reagan Michaelson",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/RSM990/Tortuga-Node/issues"
+  },
+  "homepage": "https://github.com/RSM990/Tortuga-Node#readme"
+}
