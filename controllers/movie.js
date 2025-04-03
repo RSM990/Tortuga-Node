@@ -36,7 +36,7 @@ exports.getMovies = (req, res, next) => {
       res.status(200).json({
         meta: {
           success: true,
-          message: 'Obtained movies successfully.',
+          message: 'Obtained all movies successfully.',
           page: 1,
           totalPages: 200,
           total: 20000,

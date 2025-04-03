@@ -13,10 +13,11 @@ const movieRoutes = require('./routes/movies');
 app.use(bodyParser.json());
 
 app.use(
-  cors({
-    origin: 'http://localhost:5173', // Allow requests from frontend
-    credentials: true, // Required for cookies, sessions, etc.
-  })
+  // cors({
+  //   origin: 'http://localhost:5173', // Allow requests from frontend
+  //   credentials: true, // Required for cookies, sessions, etc.
+  // })
+  cors()
 );
 app.use(express.static(path.join(__dirname, 'public')));
 
