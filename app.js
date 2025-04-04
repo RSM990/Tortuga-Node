@@ -6,7 +6,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 
 const app = express();
-
+app.set('trust proxy', true);
 // const userRoutes = require('./routes/user');
 const movieRoutes = require('./routes/movies');
 
