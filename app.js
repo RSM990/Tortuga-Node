@@ -7,6 +7,17 @@ const cors = require('cors');
 
 const app = express();
 app.set('trust proxy', true);
+app.use((req, res, next) => {
+  // Check if the environment is production
+  if (process.env.NODE_ENV === 'production') {
+    // Only redirect if the connection is not secure (HTTP)
+    if (!req.secure) {
+      return res.redirect('https://' + req.headers.host + req.url); // Redirect to HTTPS
+    }
+  }
+  next();
+});
+
 // const userRoutes = require('./routes/user');
 const movieRoutes = require('./routes/movies');
 
