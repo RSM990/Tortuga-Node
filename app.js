@@ -1,12 +1,26 @@
 const path = require('path');
 
 const express = require('express');
+
 const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
+const session = require('express-session');
+const MongoDBStore = require('connect-mongodb-session')(session);
+
 const cors = require('cors');
 
+const MONGODB_URL =
+  'mongodb+srv://tortugaDBadmin:password12345@tortuga.2ftyd.mongodb.net/?appName=Tortuga';
+
 const app = express();
+
+const store = new MongoDBStore({
+  uri: MONGODB_URL,
+  collection: 'sessions',
+});
+
 app.set('trust proxy', true);
+
 app.use((req, res, next) => {
   // Check if the environment is production
   if (process.env.NODE_ENV === 'production') {
@@ -18,7 +32,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// const userRoutes = require('./routes/user');
+const authRoutes = require('./routes/auth');
 const movieRoutes = require('./routes/movies');
 
 app.use(bodyParser.json());
@@ -32,6 +46,15 @@ app.use(
 );
 app.use(express.static(path.join(__dirname, 'public')));
 
+app.use(
+  session({
+    secret: 'my secret value',
+    resave: false,
+    saveUninitialized: false,
+    store: store,
+  })
+);
+
 app.use((req, res, next) => {
   //   User.findByPk(1)
   //     .then((user) => {
@@ -42,8 +65,19 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader(
+    'Access-Control-Allow-Methods',
+    'OPTIONS, GET, POST, PUT, PATCH, DELETE'
+  );
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  next();
+});
+
 app.use('/movies', movieRoutes);
-// app.use('/user', userRoutes);
+app.use('/auth', authRoutes);
+
 // app.use('/order', orderRoutes);
 // app.use('/cart', cartRoutes);
 
@@ -55,9 +89,7 @@ app.use((req, res, next) => {
   res.status(404).send('<h1>Page not found</h1>');
 });
 
-const uri =
-  'mongodb+srv://tortugaDBadmin:password12345@tortuga.2ftyd.mongodb.net/?appName=Tortuga';
-
+const uri = MONGODB_URL;
 mongoose
   .connect(uri, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => {

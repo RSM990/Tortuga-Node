@@ -1,7 +1,16 @@
+const { validationResult } = require('express-validator');
 const Movie = require('../models/movie');
 
 //CREATE
 exports.createMovie = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    const error = new Error('Validation failed.');
+    error.statusCode = 422;
+    error.data = errors.array();
+    throw error;
+  }
+
   const title = req.body.title;
   const releaseDate = req.body.releaseDate;
   const director = req.body.director;
