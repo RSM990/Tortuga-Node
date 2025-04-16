@@ -34,6 +34,7 @@ app.use((req, res, next) => {
 
 const authRoutes = require('./routes/auth');
 const movieRoutes = require('./routes/movies');
+const leagueRoutes = require('./routes/league');
 
 app.use(bodyParser.json());
 
@@ -75,8 +76,9 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use('/movies', movieRoutes);
 app.use('/auth', authRoutes);
+app.use('/movies', movieRoutes);
+app.use('/league', leagueRoutes);
 
 // app.use('/order', orderRoutes);
 // app.use('/cart', cartRoutes);

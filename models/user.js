@@ -23,6 +23,7 @@ const userSchema = new Schema({
     default: 'I am new!',
   },
   moviesSeen: [{ type: Schema.Types.ObjectId, ref: 'Movie' }],
+  leagues: [{ type: Schema.Types.ObjectId, ref: 'League' }],
 });
 
 module.exports = mongoose.model('User', userSchema);
