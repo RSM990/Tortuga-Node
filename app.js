@@ -38,13 +38,6 @@ const leagueRoutes = require('./routes/league');
 
 app.use(bodyParser.json());
 
-app.use(
-  // cors({
-  //   origin: 'http://localhost:5173', // Allow requests from frontend
-  //   credentials: true, // Required for cookies, sessions, etc.
-  // })
-  cors()
-);
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(
@@ -75,6 +68,15 @@ app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   next();
 });
+app.use(
+  // cors({
+  //   origin: 'http://localhost:5173', // Allow requests from frontend
+  //   credentials: true, // Required for cookies, sessions, etc.
+  //   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  // })
+  // cors()
+  cors()
+);
 
 app.use('/auth', authRoutes);
 app.use('/movies', movieRoutes);

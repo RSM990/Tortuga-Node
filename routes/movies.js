@@ -1,11 +1,12 @@
 const express = require('express');
 const { body } = require('express-validator');
+const isAuth = require('../middleware/is-auth');
 
 const movieController = require('../controllers/movie');
 
 const router = express.Router();
 
-router.get('/', movieController.getMovies);
+router.get('/', isAuth, movieController.getMovies);
 router.get('/:movieId', movieController.getMovie);
 
 router.post(

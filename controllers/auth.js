@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 const User = require('../models/user');
+const user = require('../models/user');
 
 exports.signup = (req, res, next) => {
   const errors = validationResult(req);
@@ -68,9 +69,22 @@ exports.login = (req, res, next) => {
         'somesupersecretsecret',
         { expiresIn: '1h' }
       );
+
+      res.cookie('apiToken', token, {
+        httpOnly: true,
+        secure: false, // Only over HTTPS
+        sameSite: 'Lax', // or 'Lax'
+        maxAge: 1000 * 60 * 60, // 1 hour
+      });
+
       res.status(200).json({
         token: token,
-        userId: loadedUser._id.toString(),
+        user: {
+          id: loadedUser._id.toString(),
+          email: loadedUser.email,
+          firstName: loadedUser.firstName,
+          lastName: loadedUser.lastName,
+        },
       });
     })
     .catch((err) => {
@@ -79,4 +93,29 @@ exports.login = (req, res, next) => {
       }
       next(err);
     });
+};
+
+exports.getUser = async (req, res, next) => {
+  try {
+    if (!req.userId) {
+      return res.status(200).json({ message: 'Not authenticated', data: null });
+    }
+    const user = await User.findById(req.userId).select('-password'); // sanitize
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const returnUser = {
+      id: user._id.toString(),
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+    };
+    console.log('User found:', returnUser);
+
+    res.status(200).json({
+      token: 'this was the token',
+      data: returnUser,
+    });
+  } catch (err) {
+    res.status(200).json({ message: 'Server error', data: null });
+  }
 };
