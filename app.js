@@ -69,13 +69,12 @@ app.use((req, res, next) => {
   next();
 });
 app.use(
-  // cors({
-  //   origin: 'http://localhost:5173', // Allow requests from frontend
-  //   credentials: true, // Required for cookies, sessions, etc.
-  //   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  // })
+  cors({
+    origin: 'http://localhost:5173', // Allow requests from frontend
+    credentials: true, // Required for cookies, sessions, etc.
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  })
   // cors()
-  cors()
 );
 
 app.use('/auth', authRoutes);

@@ -11,10 +11,7 @@ router.get('/:movieId', movieController.getMovie);
 
 router.post(
   '/',
-  [
-    body('title').trim().isLength({ min: 3 }),
-    body('director').trim().isLength({ min: 3 }),
-  ],
+  [body('director').trim().isLength({ min: 3 })],
   movieController.createMovie
 );
 router.post('/:movieId', movieController.updateMovie);

@@ -13,7 +13,9 @@ const movieSchema = new Schema({
   },
   director: {
     type: String,
-    required: true,
+  },
+  distributor: {
+    type: String,
   },
   imageUrl: {
     type: String,

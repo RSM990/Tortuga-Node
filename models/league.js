@@ -7,14 +7,6 @@ const leagueSchema = new Schema({
     type: String,
     required: true,
   },
-  startDate: {
-    type: Date,
-    required: true,
-  },
-  endDate: {
-    type: Date,
-    required: true,
-  },
   createdBy: {
     type: Schema.Types.ObjectId,
     ref: 'User',

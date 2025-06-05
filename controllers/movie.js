@@ -5,6 +5,7 @@ const Movie = require('../models/movie');
 exports.createMovie = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
+    console.log(errors.array());
     const error = new Error('Validation failed.');
     error.statusCode = 422;
     error.data = errors.array();
@@ -15,11 +16,13 @@ exports.createMovie = (req, res, next) => {
   const releaseDate = req.body.releaseDate;
   const director = req.body.director;
   const imageUrl = req.body.imageUrl;
+  const distributor = req.body.distributor;
   const movie = new Movie({
     title,
     releaseDate,
     director,
     imageUrl,
+    distributor,
   });
   movie
     .save()

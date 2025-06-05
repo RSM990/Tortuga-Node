@@ -6,6 +6,8 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/user');
 const user = require('../models/user');
 
+const DUMMY_SECRET = 'somesupersecretsecret';
+
 exports.signup = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -31,9 +33,28 @@ exports.signup = (req, res, next) => {
       return user.save();
     })
     .then((result) => {
+      const token = jwt.sign(
+        { email: result.email, userId: result._id.toString() },
+        DUMMY_SECRET,
+        { expiresIn: '1h' }
+      );
+
+      res.cookie('apiToken', token, {
+        httpOnly: true,
+        secure: false, // Only over HTTPS
+        sameSite: 'Lax', // or 'Lax'
+        maxAge: 1000 * 60 * 60, // 1 hour
+      });
+
       res.status(201).json({
         message: 'User created!',
-        userId: result._id,
+        token: token,
+        user: {
+          id: result._id.toString(),
+          email: result.email,
+          firstName: result.firstName,
+          lastName: result.lastName,
+        },
       });
     })
     .catch((err) => {
@@ -66,7 +87,7 @@ exports.login = (req, res, next) => {
       }
       const token = jwt.sign(
         { email: loadedUser.email, userId: loadedUser._id.toString() },
-        'somesupersecretsecret',
+        DUMMY_SECRET,
         { expiresIn: '1h' }
       );
 
@@ -100,7 +121,9 @@ exports.getUser = async (req, res, next) => {
     if (!req.userId) {
       return res.status(200).json({ message: 'Not authenticated', data: null });
     }
-    const user = await User.findById(req.userId).select('-password'); // sanitize
+    const user = await User.findById(req.userId)
+      .select('-password')
+      .populate('leagues'); // sanitize
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     const returnUser = {
@@ -108,6 +131,7 @@ exports.getUser = async (req, res, next) => {
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
+      leagues: user.leagues,
     };
     console.log('User found:', returnUser);
 
