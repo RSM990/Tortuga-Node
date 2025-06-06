@@ -41,7 +41,7 @@ exports.signup = (req, res, next) => {
 
       res.cookie('apiToken', token, {
         httpOnly: true,
-        secure: false, // Only over HTTPS
+        secure: process.env.NODE_ENV === 'production',
         sameSite: 'Lax', // or 'Lax'
         maxAge: 1000 * 60 * 60, // 1 hour
       });
@@ -93,7 +93,7 @@ exports.login = (req, res, next) => {
 
       res.cookie('apiToken', token, {
         httpOnly: true,
-        secure: false, // Only over HTTPS
+        secure: process.env.NODE_ENV === 'production',
         sameSite: 'Lax', // or 'Lax'
         maxAge: 1000 * 60 * 60, // 1 hour
       });

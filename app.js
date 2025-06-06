@@ -59,6 +59,11 @@ app.use((req, res, next) => {
   next();
 });
 
+const allowedOrigins = [
+  'http://localhost:5173', // Vite dev server
+  'https://www.tortugatest.com', // Frontend production URL
+];
+
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader(
@@ -68,9 +73,16 @@ app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   next();
 });
+
 app.use(
   cors({
-    origin: 'http://localhost:5173', // Allow requests from frontend
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true, // Required for cookies, sessions, etc.
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   })
