@@ -26,7 +26,7 @@ jobs:
 
       - name: Upload to S3
         run: |
-          aws s3 cp deployment-package.zip s3://your-bucket-name/deployment-package.zip
+          aws s3 cp deployment-package.zip s3://tortuga-node-api-deployments/deployment-package.zip
 
       - name: Deploy to CodeDeploy
         run: |
@@ -34,4 +34,4 @@ jobs:
             --application-name ${{ secrets.DEPLOY_APP_NAME }} \
             --deployment-group-name ${{ secrets.DEPLOY_GROUP_NAME }} \
             --deployment-config-name CodeDeployDefault.AllAtOnce \
-            --s3-location bucket=your-bucket-name,bundleType=zip,key=deployment-package.zip
+            --s3-location bucket=tortuga-node-api-deployments,bundleType=zip,key=deployment-package.zip
