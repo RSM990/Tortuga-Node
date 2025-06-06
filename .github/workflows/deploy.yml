@@ -6,22 +6,32 @@ on:
 
 jobs:
   deploy:
-    name: Deploy via CodeDeploy
+    name: Deploy to EC2
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
 
-      - name: Zip app for CodeDeploy
-        run: zip -r deploy.zip .
-
-      - name: Deploy to EC2 with CodeDeploy
-        uses: webfactory/create-aws-codedeploy-deployment@v1
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          application-name: ${{ secrets.DEPLOY_APP_NAME }}
-          deployment-group: ${{ secrets.DEPLOY_GROUP_NAME }}
-          deployment-config-name: CodeDeployDefault.AllAtOnce
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          region: ${{ secrets.AWS_REGION }}
-          revision-type: GitHub
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Zip source code
+        run: |
+          zip -r deployment-package.zip .
+
+      - name: Upload to S3
+        run: |
+          aws s3 cp deployment-package.zip s3://your-bucket-name/deployment-package.zip
+
+      - name: Deploy to CodeDeploy
+        run: |
+          aws deploy create-deployment \
+            --application-name ${{ secrets.DEPLOY_APP_NAME }} \
+            --deployment-group-name ${{ secrets.DEPLOY_GROUP_NAME }} \
+            --deployment-config-name CodeDeployDefault.AllAtOnce \
+            --s3-location bucket=your-bucket-name,bundleType=zip,key=deployment-package.zip
