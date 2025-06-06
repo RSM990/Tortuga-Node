@@ -34,7 +34,7 @@ exports.createLeague = (req, res, next) => {
     })
     .then((result) => {
       res.status(201).json({
-        message: 'League created successfully!',
+        message: 'League created successfully!!',
         league: league,
         creator: {
           _id: creator._id,
