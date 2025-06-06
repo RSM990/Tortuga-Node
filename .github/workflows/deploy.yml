@@ -1,0 +1,27 @@
+name: Deploy Node App to EC2 with CodeDeploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy via CodeDeploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Zip app for CodeDeploy
+        run: zip -r deploy.zip .
+
+      - name: Deploy to EC2 with CodeDeploy
+        uses: webfactory/create-aws-codedeploy-deployment@v1
+        with:
+          application-name: ${{ secrets.DEPLOY_APP_NAME }}
+          deployment-group: ${{ secrets.DEPLOY_GROUP_NAME }}
+          deployment-config-name: CodeDeployDefault.AllAtOnce
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          region: ${{ secrets.AWS_REGION }}
+          revision-type: GitHub
