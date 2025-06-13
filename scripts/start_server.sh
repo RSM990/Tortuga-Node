@@ -1,4 +1,7 @@
 #!/bin/bash
-echo "Starting the app with PM2..."
-cd /home/ec2-user/app
-pm2 start index.js --name tortuga-node-api || pm2 restart tortuga-node-api
+
+echo "Starting Node server"
+cd /home/ec2-user/Tortuga-Node
+
+# Example: start your server in background with nohup
+nohup npm start > app.log 2>&1 &

@@ -1,4 +1,5 @@
 #!/bin/bash
-echo "Installing dependencies..."
-cd /home/ec2-user/app
-npm install
+
+echo "Installing Node dependencies"
+cd /home/ec2-user/Tortuga-Node
+npm ci
