@@ -1,13 +1,12 @@
-const path = require('path');
-
 const express = require('express');
+const cors = require('cors');
+
+const path = require('path');
 
 const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
 const session = require('express-session');
 const MongoDBStore = require('connect-mongodb-session')(session);
-
-const cors = require('cors');
 
 const MONGODB_URL =
   'mongodb+srv://tortugaDBadmin:password12345@tortuga.2ftyd.mongodb.net/?appName=Tortuga';
@@ -60,13 +59,7 @@ app.use((req, res, next) => {
   next();
 });
 
-const allowedOrigins = [
-  'http://localhost:5173', // Vite dev server
-  'https://www.tortugatest.com', // Frontend production URL
-];
-
 app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader(
     'Access-Control-Allow-Methods',
     'OPTIONS, GET, POST, PUT, PATCH, DELETE'
@@ -74,6 +67,11 @@ app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   next();
 });
+
+const allowedOrigins = [
+  'http://localhost:5173', // Vite dev server
+  'https://www.tortugatest.com', // Frontend production URL
+];
 
 app.use(
   cors({
@@ -84,10 +82,8 @@ app.use(
         callback(new Error('Not allowed by CORS'));
       }
     },
-    credentials: true, // Required for cookies, sessions, etc.
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    credentials: true,
   })
-  // cors()
 );
 
 app.use('/auth', authRoutes);
