@@ -7,7 +7,7 @@ const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
 const session = require('express-session');
 const MongoDBStore = require('connect-mongodb-session')(session);
-
+const cookieParser = require('cookie-parser');
 const MONGODB_URL =
   'mongodb+srv://tortugaDBadmin:password12345@tortuga.2ftyd.mongodb.net/?appName=Tortuga';
 
@@ -49,28 +49,10 @@ app.use(
   })
 );
 
-app.use((req, res, next) => {
-  //   User.findByPk(1)
-  //     .then((user) => {
-  //       req.user = user;
-  //       next();
-  //     })
-  //     .catch((err) => console.log(err));
-  next();
-});
-
-app.use((req, res, next) => {
-  res.setHeader(
-    'Access-Control-Allow-Methods',
-    'OPTIONS, GET, POST, PUT, PATCH, DELETE'
-  );
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  next();
-});
-
 const allowedOrigins = [
   'http://localhost:5173', // Vite dev server
   'https://www.tortugatest.com', // Frontend production URL
+  'https://tortugatest.com', // Frontend production URL without www
 ];
 
 app.use(
@@ -91,9 +73,6 @@ app.use('/movies', movieRoutes);
 app.use('/league', leagueRoutes);
 app.use('/test', testRoutes);
 
-// app.use('/order', orderRoutes);
-// app.use('/cart', cartRoutes);
-
 app.get('/', (req, res) => {
   res.send('OK');
 });
@@ -101,6 +80,7 @@ app.get('/', (req, res) => {
 app.use((req, res, next) => {
   res.status(404).send('<h1>Page not found</h1>');
 });
+app.use(cookieParser());
 
 const uri = MONGODB_URL;
 mongoose
