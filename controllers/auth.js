@@ -39,16 +39,20 @@ exports.signup = (req, res, next) => {
         { expiresIn: '1h' }
       );
 
-      res.cookie('apiToken', token, {
+      const isProd = process.env.NODE_ENV === 'production';
+      const cookieOptions = {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'Lax', // or 'Lax'
+        secure: isProd, // only true when running HTTPS in prod
+        sameSite: isProd ? 'none' : 'lax', // cross-site in prod, lax in dev
+        ...(isProd && { domain: '.tortugatest.com' }),
         maxAge: 1000 * 60 * 60, // 1 hour
-      });
+      };
+
+      res.cookie('token', token, cookieOptions);
 
       res.status(201).json({
         message: 'User created!',
-        token: token,
+
         user: {
           id: result._id.toString(),
           email: result.email,
@@ -64,67 +68,64 @@ exports.signup = (req, res, next) => {
       next(err);
     });
 };
+exports.login = async (req, res, next) => {
+  const { email, password } = req.body;
 
-exports.login = (req, res, next) => {
-  const email = req.body.email;
-  const password = req.body.password;
-  let loadedUser;
-  User.findOne({ email: email })
-    .then((user) => {
-      if (!user) {
-        const error = new Error('A user with this email could not be found.');
-        error.statusCode = 401;
-        throw error;
-      }
-      loadedUser = user;
-      return bcrypt.compare(password, user.password);
-    })
-    .then((isEqual) => {
-      if (!isEqual) {
-        const error = new Error('Wrong password!');
-        error.statusCode = 401;
-        throw error;
-      }
-      const token = jwt.sign(
-        { email: loadedUser.email, userId: loadedUser._id.toString() },
-        DUMMY_SECRET,
-        { expiresIn: '1h' }
-      );
+  try {
+    const user = await User.findOne({ email });
 
-      res.cookie('apiToken', token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'Lax', // or 'Lax'
-        maxAge: 1000 * 60 * 60, // 1 hour
-      });
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid email or password' });
+    }
 
-      res.status(200).json({
-        token: token,
-        user: {
-          id: loadedUser._id.toString(),
-          email: loadedUser.email,
-          firstName: loadedUser.firstName,
-          lastName: loadedUser.lastName,
-        },
-      });
-    })
-    .catch((err) => {
-      if (!err.statusCode) {
-        err.statusCode = 500;
-      }
-      next(err);
+    const isEqual = await bcrypt.compare(password, user.password);
+    if (!isEqual) {
+      return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    const token = jwt.sign(
+      { userId: user._id.toString(), email: user.email },
+      DUMMY_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    const isProd = process.env.NODE_ENV === 'production';
+    const cookieOptions = {
+      httpOnly: true,
+      secure: isProd, // only true when running HTTPS in prod
+      sameSite: isProd ? 'none' : 'lax', // cross-site in prod, lax in dev
+      ...(isProd && { domain: '.tortugatest.com' }),
+      maxAge: 1000 * 60 * 60, // 1 hour
+    };
+
+    res.cookie('token', token, cookieOptions);
+
+    res.status(200).json({
+      user: {
+        id: user._id.toString(),
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+      },
     });
+  } catch (err) {
+    next(err);
+  }
 };
 
-exports.getUser = async (req, res, next) => {
+exports.getUser = async (req, res) => {
+  if (!req.userId) {
+    return res.status(401).json({ message: 'Not authenticated auth' });
+  }
+
   try {
-    if (!req.userId) {
-      return res.status(200).json({ message: 'Not authenticated', data: null });
-    }
     const user = await User.findById(req.userId)
       .select('-password')
-      .populate('leagues'); // sanitize
-    if (!user) return res.status(404).json({ message: 'User not found' });
+      .populate('leagues');
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
 
     const returnUser = {
       id: user._id.toString(),
@@ -133,13 +134,10 @@ exports.getUser = async (req, res, next) => {
       lastName: user.lastName,
       leagues: user.leagues,
     };
-    console.log('User found:', returnUser);
 
-    res.status(200).json({
-      token: 'this was the token',
-      data: returnUser,
-    });
+    return res.status(200).json({ data: returnUser });
   } catch (err) {
-    res.status(200).json({ message: 'Server error', data: null });
+    console.error('Error fetching user:', err);
+    return res.status(500).json({ message: 'Server error' });
   }
 };

@@ -8,6 +8,7 @@ const mongoose = require('mongoose');
 const session = require('express-session');
 const MongoDBStore = require('connect-mongodb-session')(session);
 const cookieParser = require('cookie-parser');
+
 const MONGODB_URL =
   'mongodb+srv://tortugaDBadmin:password12345@tortuga.2ftyd.mongodb.net/?appName=Tortuga';
 
@@ -31,6 +32,8 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use(cookieParser());
+
 const authRoutes = require('./routes/auth');
 const movieRoutes = require('./routes/movies');
 const leagueRoutes = require('./routes/league');
@@ -49,11 +52,9 @@ app.use(
   })
 );
 
-const allowedOrigins = [
-  'http://localhost:5173', // Vite dev server
-  'https://www.tortugatest.com', // Frontend production URL
-  'https://tortugatest.com', // Frontend production URL without www
-];
+const allowedOrigins = isProd
+  ? ['https://tortugatest.com']
+  : ['http://localhost:5173', 'http://127.0.0.1:5173'];
 
 app.use(
   cors({
@@ -80,7 +81,6 @@ app.get('/', (req, res) => {
 app.use((req, res, next) => {
   res.status(404).send('<h1>Page not found</h1>');
 });
-app.use(cookieParser());
 
 const uri = MONGODB_URL;
 mongoose

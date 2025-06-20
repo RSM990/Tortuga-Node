@@ -1,27 +1,21 @@
 const jwt = require('jsonwebtoken');
 
 module.exports = (req, res, next) => {
-  const cookie = req.get('Cookie');
+  const token = req.cookies?.token;
 
-  if (!cookie) {
-    const error = new Error('Not authenticated.');
-    error.statusCode = 401;
-    return res.status(200).json({ message: 'Not authenticated', data: null });
+  if (!token) {
+    return res.status(401).json({ message: 'Not authenticated' });
   }
-  const token = cookie.split('=')[1];
-  // const token = authHeader.split(' ')[1];
-  let decodedToken;
+
   try {
-    decodedToken = jwt.verify(token, 'somesupersecretsecret');
+    const decodedToken = jwt.verify(
+      token,
+      process.env.JWT_SECRET || 'somesupersecretsecret'
+    );
+    req.userId = decodedToken.userId; // or 'id' depending on how you sign it
+    next();
   } catch (err) {
-    err.statusCode = 500;
-    throw err;
+    console.error('JWT Error:', err.message);
+    return res.status(401).json({ message: 'Invalid or expired token' });
   }
-  if (!decodedToken) {
-    const error = new Error('Not authenticated.');
-    error.statusCode = 401;
-    return res.status(200).json({ message: 'Not authenticated', data: null });
-  }
-  req.userId = decodedToken.userId;
-  next();
 };
