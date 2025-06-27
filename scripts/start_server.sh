@@ -3,8 +3,6 @@
 echo "Starting Node server"
 cd /home/ec2-user/Tortuga-Node
 
-# explicitly set production mode
-export NODE_ENV=production
+# prefix the env var
+nohup NODE_ENV=production npm start > app.log 2>&1 &
 
-# Example: start your server in background with nohup
-nohup npm start > app.log 2>&1 &
