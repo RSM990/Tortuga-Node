@@ -3,6 +3,8 @@
 echo "Starting Node server"
 cd /home/ec2-user/Tortuga-Node
 
-# prefix the env var
-nohup NODE_ENV=production npm start > app.log 2>&1 &
+# 1) export in this shell
+export NODE_ENV=production
 
+# 2) now nohup will pick it up
+nohup npm start > app.log 2>&1 &
