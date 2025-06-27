@@ -1,10 +1,23 @@
 #!/bin/bash
 
-echo "Starting Node server"
+echo "Starting Node server with PM2..."
+
 cd /home/ec2-user/Tortuga-Node
 
-# 1) export in this shell
+# Ensure environment is set
 export NODE_ENV=production
 
-# 2) now nohup will pick it up
-nohup npm start > app.log 2>&1 &
+# Install dependencies just in case
+npm install
+
+# Stop any existing PM2 process for this app (won’t throw error if not running)
+pm2 stop tortuga-app || true
+
+# Start the app using pm2 with a consistent name
+pm2 start app.js --name tortuga-app
+
+# Save the current PM2 process list
+pm2 save
+
+# Set up PM2 to restart on reboot
+pm2 startup | grep sudo | bash
