@@ -15,6 +15,6 @@ hooks:
     - location: scripts/install_dependencies.sh
       timeout: 60
   ApplicationStart:
-    - location: start_server.sh
+    - location: scripts/start_server.sh
       timeout: 60
       runas: ec2-user
