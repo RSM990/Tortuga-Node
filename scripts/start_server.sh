@@ -14,7 +14,7 @@ npm install
 pm2 stop tortuga-app || true
 
 # Start the app using pm2 with a consistent name
-pm2 start app.js --name tortuga-app
+pm2 start ecosystem.config.js --env production
 
 # Save the current PM2 process list
 pm2 save
