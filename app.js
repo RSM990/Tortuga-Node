@@ -81,6 +81,9 @@ app.use('/test', testRoutes);
 app.get('/', (req, res) => {
   res.send('OK');
 });
+app.get('/healthz', (req, res) => {
+  res.status(200).send('OK');
+});
 
 app.use((req, res, next) => {
   res.status(404).send('<h1>Page not found</h1>');
