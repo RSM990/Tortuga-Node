@@ -1,23 +1,16 @@
 #!/bin/bash
 
-echo "Starting Node server with PM2..."
+echo "Starting Node server with PM2"
 
 cd /home/ec2-user/Tortuga-Node
 
-# Ensure environment is set
-export NODE_ENV=production
-
-# Install dependencies just in case
+# Install dependencies and PM2 if not present
 npm install
+npm install pm2 -g
 
-# Stop any existing PM2 process for this app (won’t throw error if not running)
-pm2 stop tortuga-app || true
-
-# Start the app using pm2 with a consistent name
+# Start with production environment
 pm2 start ecosystem.config.js --env production
 
-# Save the current PM2 process list
+# Optional: Save the PM2 process list for restarts on reboot
 pm2 save
-
-# Set up PM2 to restart on reboot
-pm2 startup | grep sudo | bash
+pm2 startup | tail -n 1 | bash
