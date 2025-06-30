@@ -7,6 +7,9 @@ files:
 
 hooks:
   BeforeInstall:
+    - location: scripts/stop_server.sh
+      timeout: 60
+      runas: root
     - location: scripts/clean_directory.sh
       timeout: 60
     - location: scripts/stop_server.sh
