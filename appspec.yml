@@ -11,7 +11,9 @@ hooks:
     - location: scripts/setup_node.sh
       timeout: 300
       runas: root
-
+    - location: scripts/chown_directory.sh
+      timeout: 60
+      runas: root
   AfterInstall:
     - location: scripts/install_dependencies.sh
       timeout: 300
