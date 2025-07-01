@@ -14,6 +14,10 @@ const MONGODB_URL =
 
 const app = express();
 
+app.get('/healthz', (req, res) => {
+  res.status(200).send('OK');
+});
+
 const store = new MongoDBStore({
   uri: MONGODB_URL,
   collection: 'sessions',
@@ -80,9 +84,6 @@ app.use('/test', testRoutes);
 
 app.get('/', (req, res) => {
   res.send('OK');
-});
-app.get('/healthz', (req, res) => {
-  res.status(200).send('OK');
 });
 
 app.use((req, res, next) => {
