@@ -16,6 +16,7 @@
   "description": "The backend application for the Tortuga application",
   "main": "app.js",
   "devDependencies": {
+    "dotenv": "^17.0.1",
     "nodemon": "^3.1.9"
   },
   "scripts": {

@@ -19,6 +19,7 @@ pm2 -v
 pm2 delete tortuga-app || true
 
 # Start using ecosystem file
+source /home/ec2-user/.tortuga_env
 pm2 start ecosystem.config.js --env production
 
 # Save state

@@ -9,8 +9,11 @@ const session = require('express-session');
 const MongoDBStore = require('connect-mongodb-session')(session);
 const cookieParser = require('cookie-parser');
 
-const MONGODB_URL =
-  'mongodb+srv://tortugaDBadmin:password12345@tortuga.2ftyd.mongodb.net/?appName=Tortuga';
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv').config();
+}
+
+const MONGODB_URL = process.env.MONGO_URI;
 
 const app = express();
 
@@ -49,7 +52,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(
   session({
-    secret: 'my secret value',
+    secret: process.env.SESSION_SECRET || 'defaultsecretkey',
     resave: false,
     saveUninitialized: false,
     store: store,
@@ -58,11 +61,9 @@ app.use(
 
 const isProd = process.env.NODE_ENV === 'production';
 
-const allowedOrigins = [
-  'https://tortugatest.com',
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
-];
+const allowedOrigins = isProd
+  ? 'https://tortugatest.com'
+  : ['http://localhost:5173', 'http://127.0.0.1:5173'];
 
 app.use(
   cors({
@@ -94,6 +95,6 @@ const uri = MONGODB_URL;
 mongoose
   .connect(uri, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => {
-    app.listen(3000);
+    app.listen(process.env.PORT || 3000);
   })
   .catch((err) => console.log(err));

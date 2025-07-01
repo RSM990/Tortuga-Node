@@ -10,7 +10,7 @@ module.exports = (req, res, next) => {
   try {
     const decodedToken = jwt.verify(
       token,
-      process.env.JWT_SECRET || 'somesupersecretsecret'
+      process.env.SESSION_SECRET || 'somesupersecretsecret'
     );
     req.userId = decodedToken.userId; // or 'id' depending on how you sign it
     next();
