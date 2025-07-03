@@ -6,7 +6,7 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/user');
 const user = require('../models/user');
 
-const DUMMY_SECRET = 'somesupersecretsecret';
+const SESSION_SECRET = process.env.SESSION_SECRET || 'somesupersecretsecret';
 
 exports.signup = (req, res, next) => {
   const errors = validationResult(req);
@@ -35,7 +35,7 @@ exports.signup = (req, res, next) => {
     .then((result) => {
       const token = jwt.sign(
         { email: result.email, userId: result._id.toString() },
-        DUMMY_SECRET,
+        SESSION_SECRET,
         { expiresIn: '1h' }
       );
 
@@ -85,7 +85,7 @@ exports.login = async (req, res, next) => {
 
     const token = jwt.sign(
       { userId: user._id.toString(), email: user.email },
-      DUMMY_SECRET,
+      SESSION_SECRET,
       { expiresIn: '1h' }
     );
 
