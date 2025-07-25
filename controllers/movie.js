@@ -34,7 +34,7 @@ exports.getMovies = async (req, res, next) => {
   try {
     const api = new APIFeatures(Movie.find(), req.query)
       .filter()
-      .sort()
+      .sort('releaseDate')
       .limitFields()
       .paginate();
 
@@ -47,7 +47,7 @@ exports.getMovies = async (req, res, next) => {
         success: true,
         message: 'Obtained all movies successfully.',
         page: api.queryString.page || 1,
-        totalPages: Math.ceil(moviesCount / (api.queryString.limit || 10)),
+        totalPages: Math.ceil(moviesCount / (api.queryString.limit || 20)),
         total: moviesCount,
       },
       data: movies,
