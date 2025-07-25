@@ -1,138 +1,132 @@
 const { validationResult } = require('express-validator');
 const Movie = require('../models/movie');
-
+const APIFeatures = require('../utils/apiFeatures');
 //CREATE
-exports.createMovie = (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    console.log(errors.array());
-    const error = new Error('Validation failed.');
-    error.statusCode = 422;
-    error.data = errors.array();
-    throw error;
-  }
+exports.createMovie = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
 
-  const title = req.body.title;
-  const releaseDate = req.body.releaseDate;
-  const director = req.body.director;
-  const imageUrl = req.body.imageUrl;
-  const distributor = req.body.distributor;
-  const movie = new Movie({
-    title,
-    releaseDate,
-    director,
-    imageUrl,
-    distributor,
-  });
-  movie
-    .save()
-    .then((result) => {
-      res.status(201).json({
-        message: 'Product created successfully!',
-        product: result,
-      });
-    })
-    .catch((err) => {
-      if (!err.statusCode) {
-        err.statusCode = 500;
-      }
-      next(err);
+    if (!errors.isEmpty()) {
+      console.log(errors.array());
+      const error = new Error('Validation failed.');
+      error.statusCode = 422;
+      error.data = errors.array();
+      throw error;
+    }
+
+    const movie = await Movie.create(req.body);
+
+    res.status(201).json({
+      message: 'New movie created successfully!',
+      movie,
     });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({
+      message: err.message || 'An error occurred while creating the movie.',
+      error: err.data || null,
+    });
+    next(err);
+  }
 };
 
 //READ
-exports.getMovies = (req, res, next) => {
-  Movie.find()
-    .sort({ releaseDate: 1 })
-    .then((movies) => {
-      res.status(200).json({
-        meta: {
-          success: true,
-          message: 'Obtained all movies successfully.',
-          page: 1,
-          totalPages: 200,
-          total: 20000,
-        },
-        data: movies,
-      });
-    })
-    .catch((err) => {
-      if (!err.statusCode) {
-        err.statusCode = 500;
-      }
-      next(err);
+exports.getMovies = async (req, res, next) => {
+  try {
+    const api = new APIFeatures(Movie.find(), req.query)
+      .filter()
+      .sort()
+      .limitFields()
+      .paginate();
+
+    const movies = await api.query;
+
+    const moviesCount = await Movie.countDocuments();
+
+    res.status(200).json({
+      meta: {
+        success: true,
+        message: 'Obtained all movies successfully.',
+        page: api.queryString.page || 1,
+        totalPages: Math.ceil(moviesCount / (api.queryString.limit || 10)),
+        total: moviesCount,
+      },
+      data: movies,
     });
+  } catch (err) {
+    if (!err.statusCode) {
+      err.statusCode = 500;
+    }
+    next(err);
+  }
 };
 
-exports.getMovie = (req, res, next) => {
-  const movieId = req.params.movieId;
-  Movie.findById(movieId)
-    .then((movie) => {
-      if (!movie) {
-        const error = new Error('Movie not found.');
-        error.statusCode = 404;
-        throw error;
-      }
-      res.status(200).json({
+exports.getMovie = async (req, res, next) => {
+  try {
+    const movieId = req.params.movieId;
+    const movie = await Movie.findById(movieId);
+    res.status(200).json({
+      meta: {
+        success: true,
         message: 'Movie obtained successfully.',
-        movie,
-      });
-    })
-    .catch((err) => {
-      if (!err.statusCode) {
-        err.statusCode = 500;
-      }
-      next(err);
+        page: 1,
+        totalPages: 1,
+        total: 1,
+      },
+      movie,
     });
+  } catch (err) {
+    if (!err.statusCode) {
+      err.statusCode = 500;
+    }
+    next(err);
+  }
 };
 
 //UPDATE
-exports.updateMovie = (req, res, next) => {
-  const movieId = req.params.movieId;
-  const updatedTitle = req.body.title;
-  const updatedReleaseDate = req.body.releaseDate;
-  const updatedDirector = req.body.director;
-  const updatedImageUrl = req.body.imageUrl;
-  Movie.findById(movieId)
-    .then((movie) => {
-      if (!movie) {
-        const error = new Error('Movie not found.');
-        error.statusCode = 404;
-        throw error;
-      }
-      movie.title = updatedTitle;
-      movie.releaseDate = updatedReleaseDate;
-      movie.director = updatedDirector;
-      movie.imageUrl = updatedImageUrl;
-      return movie.save();
-    })
-    .then((result) => {
-      res.status(200).json({
-        message: 'Movie updated successfully.',
-        movie: result,
-      });
-    })
-    .catch((err) => {
-      if (!err.statusCode) {
-        err.statusCode = 500;
-      }
-      next(err);
+exports.updateMovie = async (req, res, next) => {
+  try {
+    const movie = await Movie.findByIdAndUpdate(req.params.movieId, req.body, {
+      new: true,
+      runValidators: true,
     });
+    res.status(200).json({
+      meta: {
+        success: true,
+        message: 'Movie updated successfully.',
+        page: 1,
+        totalPages: 1,
+        total: 1,
+      },
+      movie,
+    });
+  } catch (err) {
+    if (!err.statusCode) {
+      err.statusCode = 500;
+    }
+    next(err);
+  }
 };
 
 //DELETE
-exports.deleteMovie = (req, res, next) => {
-  const movieId = req.params.movieId;
-  Movie.findByIdAndDelete(movieId)
-    .then(() => {
-      res.status(200).json({
+exports.deleteMovie = async (req, res, next) => {
+  try {
+    const movieId = req.params.movieId;
+    await Movie.findByIdAndDelete(movieId);
+
+    res.status(204).json({
+      meta: {
+        success: true,
         message: 'Movie deleted successfully.',
-      });
-    })
-    .catch((err) => {
-      if (!err.statusCode) {
-        err.statusCode = 500;
-      }
-      next(err);
+        page: 1,
+        totalPages: 1,
+        total: 0,
+      },
+      data: null,
     });
+  } catch (err) {
+    if (!err.statusCode) {
+      err.statusCode = 500;
+    }
+    next(err);
+  }
 };

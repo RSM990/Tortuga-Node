@@ -14,7 +14,7 @@ router.post(
   [body('director').trim().isLength({ min: 3 })],
   movieController.createMovie
 );
-router.post('/:movieId', movieController.updateMovie);
+router.patch('/:movieId', movieController.updateMovie);
 
 router.delete('/:movieId', movieController.deleteMovie);
 module.exports = router;

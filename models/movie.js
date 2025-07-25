@@ -9,7 +9,7 @@ const movieSchema = new Schema({
   },
   releaseDate: {
     type: Date,
-    required: true,
+    required: [true, "a movie's release date is required"],
   },
   director: {
     type: String,
@@ -20,6 +20,16 @@ const movieSchema = new Schema({
   imageUrl: {
     type: String,
     required: true,
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+    select: false,
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now,
+    select: false,
   },
 });
 
