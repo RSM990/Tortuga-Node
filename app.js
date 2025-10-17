@@ -9,6 +9,8 @@ const session = require('express-session');
 const MongoDBStore = require('connect-mongodb-session')(session);
 const cookieParser = require('cookie-parser');
 
+const { apiRateLimit } = require('./middleware/rate-limit');
+
 if (process.env.NODE_ENV !== 'production') {
   require('dotenv').config();
 }
@@ -17,20 +19,29 @@ const MONGODB_URL = process.env.MONGO_URI;
 
 const app = express();
 
-app.get('/healthz', (req, res) => {
-  res.status(200).send('OK');
-});
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
 
-const store = new MongoDBStore({
-  uri: MONGODB_URL,
-  collection: 'sessions',
-});
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+      return cb(new Error(`CORS blocked: ${origin}`));
+    },
+    credentials: true,
+  })
+);
 
-app.set('trust proxy', true);
+const isProd = process.env.NODE_ENV === 'production';
+// In prod behind a single proxy/load balancer (ALB/NGINX/Heroku), trust 1 hop.
+// In local dev, don't trust proxies.
+app.set('trust proxy', isProd ? 1 : false);
 
 app.use((req, res, next) => {
   // Check if the environment is production
-  if (process.env.NODE_ENV === 'production') {
+  if (isProd) {
     // Only redirect if the connection is not secure (HTTP)
     if (!req.secure) {
       return res.redirect('https://' + req.headers.host + req.url); // Redirect to HTTPS
@@ -40,15 +51,26 @@ app.use((req, res, next) => {
 });
 
 app.use(cookieParser());
+app.use(express.json({ limit: '1mb' }));
+app.use(bodyParser.json());
+
+app.use(apiRateLimit);
+
+app.get('/healthz', (req, res) => {
+  res.status(200).send('OK');
+});
 
 const authRoutes = require('./routes/auth');
 const movieRoutes = require('./routes/movies');
 const leagueRoutes = require('./routes/league');
 const testRoutes = require('./routes/test');
 
-app.use(bodyParser.json());
-
 app.use(express.static(path.join(__dirname, 'public')));
+
+const store = new MongoDBStore({
+  uri: MONGODB_URL,
+  collection: 'sessions',
+});
 
 app.use(
   session({
@@ -59,29 +81,10 @@ app.use(
   })
 );
 
-const isProd = process.env.NODE_ENV === 'production';
-
-const allowedOrigins = isProd
-  ? 'https://tortugatest.com'
-  : ['http://localhost:5173', 'http://127.0.0.1:5173'];
-
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
-    credentials: true,
-  })
-);
-
-app.use('/auth', authRoutes);
-app.use('/movies', movieRoutes);
-app.use('/league', leagueRoutes);
-app.use('/test', testRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/movies', movieRoutes);
+app.use('/api/league', leagueRoutes);
+app.use('/api/test', testRoutes);
 
 app.get('/', (req, res) => {
   res.send('OK');
@@ -90,6 +93,7 @@ app.get('/', (req, res) => {
 app.use((req, res, next) => {
   res.status(404).send('<h1>Page not found</h1>');
 });
+app.get('/healthz', (_req, res) => res.status(200).json({ ok: true }));
 
 const uri = MONGODB_URL;
 mongoose

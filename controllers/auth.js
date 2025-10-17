@@ -40,13 +40,20 @@ exports.signup = (req, res, next) => {
       );
 
       const isProd = process.env.NODE_ENV === 'production';
-      const cookieOptions = {
-        httpOnly: true,
-        secure: isProd, // only true when running HTTPS in prod
-        sameSite: isProd ? 'none' : 'lax', // cross-site in prod, lax in dev
-        ...(isProd && { domain: '.tortugatest.com' }),
-        maxAge: 1000 * 60 * 60, // 1 hour
-      };
+      const cookieOptions = isProd
+        ? {
+            httpOnly: true,
+            sameSite: 'none',
+            secure: true,
+            domain: '.tortugatest.com',
+            path: '/',
+          }
+        : {
+            httpOnly: true,
+            sameSite: 'lax', // fine now that we're same-origin via proxy
+            secure: false,
+            path: '/',
+          };
 
       res.cookie('token', token, cookieOptions);
 
@@ -90,13 +97,20 @@ exports.login = async (req, res, next) => {
     );
 
     const isProd = process.env.NODE_ENV === 'production';
-    const cookieOptions = {
-      httpOnly: true,
-      secure: isProd, // only true when running HTTPS in prod
-      sameSite: isProd ? 'none' : 'lax', // cross-site in prod, lax in dev
-      ...(isProd && { domain: '.tortugatest.com' }),
-      maxAge: 1000 * 60 * 60, // 1 hour
-    };
+    const cookieOptions = isProd
+      ? {
+          httpOnly: true,
+          sameSite: 'none',
+          secure: true,
+          domain: '.tortugatest.com',
+          path: '/',
+        }
+      : {
+          httpOnly: true,
+          sameSite: 'lax', // fine now that we're same-origin via proxy
+          secure: false,
+          path: '/',
+        };
 
     res.cookie('token', token, cookieOptions);
 

@@ -7,6 +7,7 @@ const movieSchema = new Schema({
     type: String,
     required: true,
   },
+  slug: { type: String, index: true, unique: false }, // we'll keep non-unique for now to avoid index conflicts
   releaseDate: {
     type: Date,
     required: [true, "a movie's release date is required"],
@@ -17,10 +18,13 @@ const movieSchema = new Schema({
   distributor: {
     type: String,
   },
+  genres: [{ type: String }],
+  runtimeMin: { type: Number },
   imageUrl: {
     type: String,
     required: true,
   },
+  posterUrl: { type: String }, // separate from imageUrl, if you already use that in FE we keep both
   createdAt: {
     type: Date,
     default: Date.now,
@@ -30,6 +34,15 @@ const movieSchema = new Schema({
     type: Date,
     default: Date.now,
     select: false,
+  },
+  sources: {
+    bom: {
+      url: { type: String },
+      bomId: { type: String },
+    },
+    tmdb: {
+      id: { type: String },
+    },
   },
 });
 

@@ -32,25 +32,32 @@ exports.createMovie = async (req, res, next) => {
 //READ
 exports.getMovies = async (req, res, next) => {
   try {
-    const api = new APIFeatures(Movie.find(), req.query)
+    // Build filtered query first (no paginate) so count matches filters
+    const base = new APIFeatures(Movie.find(), req.query)
       .filter()
-      .sort('releaseDate')
-      .limitFields()
-      .paginate();
+      .sort()
+      .limitFields();
+    const total = await base.query.clone().countDocuments();
+    // Apply pagination with sane bounds
+    const page = Math.max(parseInt(req.query.page || '1', 10), 1);
+    const rawLimit = parseInt(req.query.limit || '20', 10);
+    const limit = Math.min(Math.max(rawLimit, 1), 100);
+    const paged = new APIFeatures(base.query, {
+      ...req.query,
+      page,
+      limit,
+    }).paginate();
+    const docs = await paged.query;
 
-    const movies = await api.query;
-
-    const moviesCount = await Movie.countDocuments();
-
-    res.status(200).json({
+    return res.status(200).json({
       meta: {
         success: true,
-        message: 'Obtained all movies successfully.',
-        page: api.queryString.page || 1,
-        totalPages: Math.ceil(moviesCount / (api.queryString.limit || 20)),
-        total: moviesCount,
+        message: 'Movies fetched successfully.',
+        page,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
       },
-      data: movies,
+      data: docs,
     });
   } catch (err) {
     if (!err.statusCode) {
