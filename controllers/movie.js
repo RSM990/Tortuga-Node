@@ -1,139 +1,229 @@
-const { validationResult } = require('express-validator');
+// controllers/movie.js
+'use strict';
+
 const Movie = require('../models/movie');
-const APIFeatures = require('../utils/apiFeatures');
-//CREATE
-exports.createMovie = async (req, res, next) => {
-  try {
-    const errors = validationResult(req);
+const {
+  buildBracketFilter,
+  buildFriendlyMovieFilter,
+  mergeConditions,
+} = require('../utils/query');
 
-    if (!errors.isEmpty()) {
-      console.log(errors.array());
-      const error = new Error('Validation failed.');
-      error.statusCode = 422;
-      error.data = errors.array();
-      throw error;
-    }
-
-    const movie = await Movie.create(req.body);
-
-    res.status(201).json({
-      message: 'New movie created successfully!',
-      movie,
-    });
-  } catch (err) {
-    res.status(err.statusCode || 500).json({
-      message: err.message || 'An error occurred while creating the movie.',
-      error: err.data || null,
-    });
-    next(err);
-  }
-};
-
-//READ
+/**
+ * GET /api/movies
+ * Supports friendly params and bracket operators:
+ *  - page, limit
+ *  - name|title (case-insensitive contains)
+ *  - studio      (maps to distributor, case-insensitive exact)
+ *  - genre       (matches array 'genres' or string 'genre', case-insensitive)
+ *  - releaseDateStart / releaseDateEnd
+ *  - bracket style: releaseDate[gte], releaseDate[lte], genres[in]=a,b
+ *  - sort: releaseDate_desc | releaseDate_asc
+ */
 exports.getMovies = async (req, res, next) => {
   try {
-    // Build filtered query first (no paginate) so count matches filters
-    const base = new APIFeatures(Movie.find(), req.query)
-      .filter()
-      .sort()
-      .limitFields();
-    const total = await base.query.clone().countDocuments();
-    // Apply pagination with sane bounds
-    const page = Math.max(parseInt(req.query.page || '1', 10), 1);
-    const rawLimit = parseInt(req.query.limit || '20', 10);
-    const limit = Math.min(Math.max(rawLimit, 1), 100);
-    const paged = new APIFeatures(base.query, {
-      ...req.query,
-      page,
-      limit,
-    }).paginate();
-    const docs = await paged.query;
+    // ---- paging ----
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.max(parseInt(req.query.limit, 10) || 20, 1);
+    const skip = (page - 1) * limit;
 
-    return res.status(200).json({
+    // ---- filters: friendly + bracket ----
+    const friendly = buildFriendlyMovieFilter(req.query);
+    const bracket = buildBracketFilter(req.query, {
+      dateFields: ['releaseDate'],
+      arrayFields: ['genres'],
+      // numberFields: [] // add if needed later
+    });
+
+    let q = mergeConditions(friendly, bracket);
+
+    // ---- SPECIAL: make genres[in] robust, case-insensitive, and tolerant of both shapes
+    //    - convert { genres: { $in: [...] } } into:
+    //      { $or: [{ genres: { $elemMatch: /.../i } }, { genre: /.../i }, ...] }
+    if (
+      q.genres &&
+      q.genres.$in &&
+      Array.isArray(q.genres.$in) &&
+      q.genres.$in.length > 0
+    ) {
+      const arr = q.genres.$in;
+      delete q.genres;
+
+      const toRegex = (val) =>
+        val instanceof RegExp
+          ? val
+          : new RegExp(
+              `^${String(val).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
+              'i'
+            );
+
+      q.$or = (q.$or || []).concat(
+        arr.flatMap((val) => {
+          const re = toRegex(val);
+          return [
+            { genres: { $elemMatch: { $regex: re } } }, // genres: array of strings
+            { genre: { $regex: re } }, // genre: single string (if any docs)
+          ];
+        })
+      );
+    }
+
+    // ---- sorting ----
+    const { sort } = req.query;
+    let sortSpec = { releaseDate: -1, _id: -1 };
+    if (sort === 'releaseDate_asc') sortSpec = { releaseDate: 1, _id: 1 };
+    if (sort === 'releaseDate_desc') sortSpec = { releaseDate: -1, _id: -1 };
+
+    // ---- execute ----
+    const [items, total] = await Promise.all([
+      Movie.find(q).sort(sortSpec).skip(skip).limit(limit).lean(),
+      Movie.countDocuments(q),
+    ]);
+
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+
+    return res.json({
       meta: {
         success: true,
         message: 'Movies fetched successfully.',
         page,
         total,
-        totalPages: Math.max(1, Math.ceil(total / limit)),
+        totalPages,
       },
-      data: docs,
+      data: items,
     });
   } catch (err) {
-    if (!err.statusCode) {
-      err.statusCode = 500;
-    }
+    if (!err.statusCode) err.statusCode = 500;
     next(err);
   }
 };
 
+/**
+ * GET /api/movies/:movieId
+ */
 exports.getMovie = async (req, res, next) => {
   try {
-    const movieId = req.params.movieId;
-    const movie = await Movie.findById(movieId);
-    res.status(200).json({
+    const movie = await Movie.findById(req.params.movieId).lean();
+    if (!movie) {
+      return res.status(404).json({
+        meta: {
+          success: false,
+          message: 'Movie not found',
+          page: 1,
+          total: 0,
+          totalPages: 1,
+        },
+        data: null,
+      });
+    }
+    return res.json({
       meta: {
         success: true,
-        message: 'Movie obtained successfully.',
+        message: 'Movie fetched',
         page: 1,
-        totalPages: 1,
         total: 1,
+        totalPages: 1,
       },
-      movie,
+      data: movie,
     });
   } catch (err) {
-    if (!err.statusCode) {
-      err.statusCode = 500;
-    }
+    if (!err.statusCode) err.statusCode = 500;
     next(err);
   }
 };
 
-//UPDATE
-exports.updateMovie = async (req, res, next) => {
+/**
+ * GET /api/movies/genres
+ * Returns distinct genres (lowercased) with counts.
+ * Defensive against missing/empty/non-array fields and provides diagnostics.
+ */
+exports.getDistinctGenres = async (req, res, next) => {
   try {
-    const movie = await Movie.findByIdAndUpdate(req.params.movieId, req.body, {
-      new: true,
-      runValidators: true,
-    });
-    res.status(200).json({
+    // Aggregate genres from array form
+    const rows = await Movie.aggregate([
+      {
+        $project: {
+          genresArray: {
+            $cond: [
+              { $isArray: '$genres' },
+              {
+                $filter: {
+                  input: '$genres',
+                  as: 'g',
+                  cond: {
+                    $and: [
+                      { $ne: ['$$g', null] },
+                      { $ne: ['$$g', ''] },
+                      { $eq: [{ $type: '$$g' }, 'string'] },
+                    ],
+                  },
+                },
+              },
+              [],
+            ],
+          },
+        },
+      },
+      { $unwind: { path: '$genresArray', preserveNullAndEmptyArrays: false } },
+      { $group: { _id: { $toLower: '$genresArray' }, count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 500 },
+    ]);
+
+    // Aggregate genres if stored as single string "genre" (rare/fallback)
+    const single = await Movie.aggregate([
+      {
+        $project: {
+          genre: {
+            $cond: [
+              { $and: [{ $ne: ['$genre', null] }, { $ne: ['$genre', ''] }] },
+              { $toLower: '$genre' },
+              null,
+            ],
+          },
+        },
+      },
+      { $match: { genre: { $ne: null } } },
+      { $group: { _id: '$genre', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 500 },
+    ]);
+
+    // Merge results
+    const map = new Map();
+    for (const r of rows) map.set(r._id, (map.get(r._id) || 0) + r.count);
+    for (const r of single) map.set(r._id, (map.get(r._id) || 0) + r.count);
+
+    const merged = Array.from(map.entries())
+      .filter(([g]) => g && g.trim() !== '')
+      .map(([genre, count]) => ({ genre, count }))
+      .sort((a, b) => b.count - a.count);
+
+    // Diagnostics
+    const [total, withGenresArray, withGenreString] = await Promise.all([
+      Movie.countDocuments({}),
+      Movie.countDocuments({
+        genres: { $exists: true, $type: 'array', $not: { $size: 0 } },
+      }),
+      Movie.countDocuments({ genre: { $exists: true, $ne: '' } }),
+    ]);
+
+    return res.json({
       meta: {
         success: true,
-        message: 'Movie updated successfully.',
+        message: 'Distinct genres',
         page: 1,
+        total: merged.length,
         totalPages: 1,
-        total: 1,
+        diagnostics: {
+          totalDocs: total,
+          hasGenresArray: withGenresArray,
+          hasGenreString: withGenreString,
+        },
       },
-      movie,
+      data: merged,
     });
   } catch (err) {
-    if (!err.statusCode) {
-      err.statusCode = 500;
-    }
-    next(err);
-  }
-};
-
-//DELETE
-exports.deleteMovie = async (req, res, next) => {
-  try {
-    const movieId = req.params.movieId;
-    await Movie.findByIdAndDelete(movieId);
-
-    res.status(204).json({
-      meta: {
-        success: true,
-        message: 'Movie deleted successfully.',
-        page: 1,
-        totalPages: 1,
-        total: 0,
-      },
-      data: null,
-    });
-  } catch (err) {
-    if (!err.statusCode) {
-      err.statusCode = 500;
-    }
+    if (!err.statusCode) err.statusCode = 500;
     next(err);
   }
 };

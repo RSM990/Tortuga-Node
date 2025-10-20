@@ -46,4 +46,9 @@ const movieSchema = new Schema({
   },
 });
 
+movieSchema.index({ title: 1, releaseDate: -1 });
+movieSchema.index({ distributor: 1, releaseDate: -1 });
+movieSchema.index({ genres: 1, releaseDate: -1 });
+movieSchema.index({ releaseDate: -1 });
+
 module.exports = mongoose.model('Movie', movieSchema);

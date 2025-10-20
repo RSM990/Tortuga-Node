@@ -1,157 +1,143 @@
 const { validationResult } = require('express-validator');
-
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-
 const User = require('../models/user');
-const user = require('../models/user');
 
 const SESSION_SECRET = process.env.SESSION_SECRET || 'somesupersecretsecret';
 
-exports.signup = (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    const error = new Error('Validation failed.');
-    error.statusCode = 422;
-    error.data = errors.array();
-    throw error;
-  }
-
-  const email = req.body.email;
-  const firstName = req.body.firstName;
-  const lastName = req.body.lastName;
-  const password = req.body.password;
-  bcrypt
-    .hash(password, 12)
-    .then((hashedPw) => {
-      const user = new User({
-        email: email,
-        password: hashedPw,
-        firstName: firstName,
-        lastName: lastName,
-      });
-      return user.save();
-    })
-    .then((result) => {
-      const token = jwt.sign(
-        { email: result.email, userId: result._id.toString() },
-        SESSION_SECRET,
-        { expiresIn: '1h' }
-      );
-
-      const isProd = process.env.NODE_ENV === 'production';
-      const cookieOptions = isProd
-        ? {
-            httpOnly: true,
-            sameSite: 'none',
-            secure: true,
-            domain: '.tortugatest.com',
-            path: '/',
-          }
-        : {
-            httpOnly: true,
-            sameSite: 'lax', // fine now that we're same-origin via proxy
-            secure: false,
-            path: '/',
-          };
-
-      res.cookie('token', token, cookieOptions);
-
-      res.status(201).json({
-        message: 'User created!',
-
-        user: {
-          id: result._id.toString(),
-          email: result.email,
-          firstName: result.firstName,
-          lastName: result.lastName,
-        },
-      });
-    })
-    .catch((err) => {
-      if (!err.statusCode) {
-        err.statusCode = 500;
-      }
-      next(err);
-    });
+const cookieOptionsForEnv = () => {
+  const isProd = process.env.NODE_ENV === 'production';
+  return {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? 'none' : 'lax',
+    ...(isProd && { domain: '.tortugatest.com' }),
+    path: '/',
+    maxAge: 1000 * 60 * 60, // 1 hour
+  };
 };
-exports.login = async (req, res, next) => {
+
+exports.signup = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty())
+    return res
+      .status(422)
+      .json({ message: 'Validation failed', data: errors.array() });
+
+  const { email, password, firstName, lastName } = req.body;
+  const hashedPw = await bcrypt.hash(password, 12);
+  const user = new User({ email, password: hashedPw, firstName, lastName });
+  const result = await user.save();
+
+  const token = jwt.sign(
+    { userId: result._id.toString(), email: result.email },
+    SESSION_SECRET,
+    { expiresIn: '1h' }
+  );
+  res.cookie('token', token, cookieOptionsForEnv());
+
+  const safeUser = {
+    id: result._id.toString(),
+    email: result.email,
+    firstName: result.firstName,
+    lastName: result.lastName,
+    leagues: result.leagues,
+  };
+  return res.status(201).json({ token, user: safeUser });
+};
+
+exports.login = async (req, res) => {
   const { email, password } = req.body;
+  const u = await User.findOne({ email });
+  if (!u) return res.status(401).json({ message: 'Invalid email or password' });
+  const ok = await bcrypt.compare(password, u.password);
+  if (!ok)
+    return res.status(401).json({ message: 'Invalid email or password' });
 
-  try {
-    const user = await User.findOne({ email });
+  const token = jwt.sign(
+    { userId: u._id.toString(), email: u.email },
+    SESSION_SECRET,
+    { expiresIn: '1h' }
+  );
+  res.cookie('token', token, cookieOptionsForEnv());
 
-    if (!user) {
-      return res.status(401).json({ message: 'Invalid email or password' });
-    }
+  const safeUser = {
+    id: u._id.toString(),
+    email: u.email,
+    firstName: u.firstName,
+    lastName: u.lastName,
+    leagues: u.leagues,
+  };
+  return res.status(200).json({ token, user: safeUser });
+};
 
-    const isEqual = await bcrypt.compare(password, user.password);
-    if (!isEqual) {
-      return res.status(401).json({ message: 'Invalid email or password' });
-    }
-
-    const token = jwt.sign(
-      { userId: user._id.toString(), email: user.email },
-      SESSION_SECRET,
-      { expiresIn: '1h' }
-    );
-
-    const isProd = process.env.NODE_ENV === 'production';
-    const cookieOptions = isProd
-      ? {
-          httpOnly: true,
-          sameSite: 'none',
-          secure: true,
-          domain: '.tortugatest.com',
-          path: '/',
-        }
-      : {
-          httpOnly: true,
-          sameSite: 'lax', // fine now that we're same-origin via proxy
-          secure: false,
-          path: '/',
-        };
-
-    res.cookie('token', token, cookieOptions);
-
-    res.status(200).json({
-      user: {
-        id: user._id.toString(),
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-      },
-    });
-  } catch (err) {
-    next(err);
-  }
+exports.logout = async (_req, res) => {
+  res.clearCookie('token', {
+    path: '/',
+    ...(process.env.NODE_ENV === 'production'
+      ? { domain: '.tortugatest.com', sameSite: 'none', secure: true }
+      : {}),
+  });
+  return res.status(200).json({ ok: true });
 };
 
 exports.getUser = async (req, res) => {
-  if (!req.userId) {
-    return res.status(401).json({ message: 'Not authenticated auth' });
-  }
+  const u = await User.findById(req.userId).populate('leagues');
+  if (!u) return res.status(404).json({ message: 'User not found' });
+  const safeUser = {
+    id: u._id.toString(),
+    email: u.email,
+    firstName: u.firstName,
+    lastName: u.lastName,
+    leagues: u.leagues,
+  };
+  return res.status(200).json(safeUser); // return the user object directly
+};
 
-  try {
-    const user = await User.findById(req.userId)
-      .select('-password')
-      .populate('leagues');
+exports.updateMe = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty())
+    return res
+      .status(422)
+      .json({ message: 'Validation failed', data: errors.array() });
 
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
+  const { firstName, lastName } = req.body;
+  const u = await User.findById(req.userId);
+  if (!u) return res.status(404).json({ message: 'User not found' });
 
-    const returnUser = {
-      id: user._id.toString(),
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      leagues: user.leagues,
-    };
+  if (typeof firstName === 'string' && firstName.trim())
+    u.firstName = firstName.trim();
+  if (typeof lastName === 'string' && lastName.trim())
+    u.lastName = lastName.trim();
+  await u.save();
 
-    return res.status(200).json({ data: returnUser });
-  } catch (err) {
-    console.error('Error fetching user:', err);
-    return res.status(500).json({ message: 'Server error' });
-  }
+  const safeUser = {
+    id: u._id.toString(),
+    email: u.email,
+    firstName: u.firstName,
+    lastName: u.lastName,
+    leagues: u.leagues,
+  };
+  return res.status(200).json(safeUser);
+};
+
+exports.updatePassword = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty())
+    return res
+      .status(422)
+      .json({ message: 'Validation failed', data: errors.array() });
+
+  const { currentPassword, newPassword } = req.body;
+  const u = await User.findById(req.userId);
+  if (!u) return res.status(404).json({ message: 'User not found' });
+
+  const ok = await bcrypt.compare(currentPassword, u.password);
+  if (!ok)
+    return res.status(401).json({ message: 'Current password is incorrect' });
+
+  u.password = await bcrypt.hash(newPassword, 12);
+  await u.save();
+
+  return res.status(200).json({ ok: true });
 };

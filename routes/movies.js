@@ -6,7 +6,8 @@ const movieController = require('../controllers/movie');
 const router = express.Router();
 
 router.get('/', isAuth, movieController.getMovies);
-router.get('/:movieId', movieController.getMovie);
+router.get('/genres', isAuth, movieController.getDistinctGenres);
+router.get('/:movieId', isAuth, movieController.getMovie);
 
 const createUpdateRules = [
   body('title')
@@ -47,9 +48,9 @@ const createUpdateRules = [
   body('sources.tmdb.id').optional({ nullable: true }).isString(),
 ];
 
-router.post('/', createUpdateRules, movieController.createMovie);
-router.patch('/:movieId', createUpdateRules, movieController.updateMovie);
+// router.post('/', createUpdateRules, movieController.createMovie);
+// router.patch('/:movieId', createUpdateRules, movieController.updateMovie);
 
-router.delete('/:movieId', movieController.deleteMovie);
+// router.delete('/:movieId', movieController.deleteMovie);
 
 module.exports = router;
