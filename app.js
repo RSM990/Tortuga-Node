@@ -39,13 +39,12 @@ const isProd = process.env.NODE_ENV === 'production';
 // In local dev, don't trust proxies.
 app.set('trust proxy', isProd ? 1 : false);
 
+app.get('/healthz', (req, res) => {
+  res.status(200).send('OK');
+});
 app.use((req, res, next) => {
-  // Check if the environment is production
-  if (isProd) {
-    // Only redirect if the connection is not secure (HTTP)
-    if (!req.secure) {
-      return res.redirect('https://' + req.headers.host + req.url); // Redirect to HTTPS
-    }
+  if (isProd && req.path !== '/healthz' && !req.secure) {
+    return res.redirect('https://' + req.headers.host + req.url);
   }
   next();
 });
@@ -55,10 +54,6 @@ app.use(express.json({ limit: '1mb' }));
 app.use(bodyParser.json());
 
 app.use(apiRateLimit);
-
-app.get('/healthz', (req, res) => {
-  res.status(200).send('OK');
-});
 
 const authRoutes = require('./routes/auth');
 const movieRoutes = require('./routes/movies');
