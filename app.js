@@ -32,9 +32,20 @@ const allowedOrigins = (
   .map((s) => s.trim())
   .filter(Boolean);
 
+const allowByRule = (origin) => {
+  if (!origin) return true; // allow same-origin / curl
+  if (allowedOrigins.includes(origin)) return true;
+  try {
+    const url = new URL(origin);
+    if (url.hostname === 'tortugatest.com') return true;
+    if (url.hostname.endsWith('.tortugatest.com')) return true;
+  } catch {}
+  return false;
+};
+
 const corsOptions = {
   origin: (origin, cb) =>
-    !origin || allowedOrigins.includes(origin)
+    allowByRule(origin)
       ? cb(null, true)
       : cb(new Error(`CORS blocked: ${origin}`)),
 
@@ -48,7 +59,7 @@ const corsOptions = {
   credentials: true,
 };
 app.use(cors(corsOptions));
-app.options('*', cors({ origin: allowedOrigins, credentials: true }));
+app.options('*', cors(corsOptions));
 
 // ------------- Health endpoints BEFORE ANY redirect/rate-limit/session
 app.get('/healthz', (_req, res) => res.status(200).send('OK'));
