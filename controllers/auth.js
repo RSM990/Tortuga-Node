@@ -11,9 +11,9 @@ const cookieOptionsForEnv = () => {
     httpOnly: true,
     secure: isProd,
     sameSite: isProd ? 'none' : 'lax',
-    ...(isProd && { domain: '.tortugatest.com' }),
+    domain: isProd ? '.tortugatest.com' : undefined,
     path: '/',
-    maxAge: 1000 * 60 * 60, // 1 hour
+    maxAge: 1000 * 60 * 60,
   };
 };
 
