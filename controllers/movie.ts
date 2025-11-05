@@ -1,44 +1,45 @@
-// controllers/movie.js
-'use strict';
-
-const Movie = require('../models/movie');
-const {
+// src/controllers/movie.ts
+import type { Request, Response, NextFunction } from 'express';
+import Movie from '../models/Movie.js';
+import {
   buildBracketFilter,
   buildFriendlyMovieFilter,
   mergeConditions,
-} = require('../utils/query');
+} from '../utils/query.js';
 
-/**
- * GET /api/movies
- * Supports friendly params and bracket operators:
- *  - page, limit
- *  - name|title (case-insensitive contains)
- *  - studio      (maps to distributor, case-insensitive exact)
- *  - genre       (matches array 'genres' or string 'genre', case-insensitive)
- *  - releaseDateStart / releaseDateEnd
- *  - bracket style: releaseDate[gte], releaseDate[lte], genres[in]=a,b
- *  - sort: releaseDate_desc | releaseDate_asc
- */
-exports.getMovies = async (req, res, next) => {
+// Helpers
+const toInt = (val: unknown, def: number) => {
+  const n = parseInt(String(val ?? ''), 10);
+  return Number.isFinite(n) && n > 0 ? n : def;
+};
+
+// Convert plain value to case-insensitive exact-match RegExp
+const toCiExact = (val: unknown): RegExp =>
+  val instanceof RegExp
+    ? val
+    : new RegExp(
+        `^${String(val).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
+        'i'
+      );
+
+async function getMovies(req: Request, res: Response, next: NextFunction) {
   try {
-    // ---- paging ----
-    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
-    const limit = Math.max(parseInt(req.query.limit, 10) || 20, 1);
+    // paging
+    const page = Math.max(toInt(req.query.page, 1), 1);
+    const limit = Math.max(toInt(req.query.limit, 20), 1);
     const skip = (page - 1) * limit;
 
-    // ---- filters: friendly + bracket ----
-    const friendly = buildFriendlyMovieFilter(req.query);
-    const bracket = buildBracketFilter(req.query, {
+    // filters
+    const friendly = buildFriendlyMovieFilter(req.query as Record<string, any>);
+    const bracket = buildBracketFilter(req.query as Record<string, any>, {
       dateFields: ['releaseDate'],
       arrayFields: ['genres'],
-      // numberFields: [] // add if needed later
+      // numberFields: [] // extend later
     });
 
-    let q = mergeConditions(friendly, bracket);
+    let q: Record<string, any> = mergeConditions(friendly, bracket);
 
-    // ---- SPECIAL: make genres[in] robust, case-insensitive, and tolerant of both shapes
-    //    - convert { genres: { $in: [...] } } into:
-    //      { $or: [{ genres: { $elemMatch: /.../i } }, { genre: /.../i }, ...] }
+    // normalize genres[in]
     if (
       q.genres &&
       q.genres.$in &&
@@ -48,32 +49,24 @@ exports.getMovies = async (req, res, next) => {
       const arr = q.genres.$in;
       delete q.genres;
 
-      const toRegex = (val) =>
-        val instanceof RegExp
-          ? val
-          : new RegExp(
-              `^${String(val).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
-              'i'
-            );
-
       q.$or = (q.$or || []).concat(
-        arr.flatMap((val) => {
-          const re = toRegex(val);
+        arr.flatMap((val: unknown) => {
+          const re = toCiExact(val);
           return [
-            { genres: { $elemMatch: { $regex: re } } }, // genres: array of strings
-            { genre: { $regex: re } }, // genre: single string (if any docs)
+            { genres: { $elemMatch: { $regex: re } } }, // genres: string[]
+            { genre: { $regex: re } }, // genre: string (fallback shape)
           ];
         })
       );
     }
 
-    // ---- sorting ----
-    const { sort } = req.query;
-    let sortSpec = { releaseDate: -1, _id: -1 };
+    // sorting
+    const sort = String(req.query.sort ?? '');
+    let sortSpec: Record<string, 1 | -1> = { releaseDate: -1, _id: -1 };
     if (sort === 'releaseDate_asc') sortSpec = { releaseDate: 1, _id: 1 };
     if (sort === 'releaseDate_desc') sortSpec = { releaseDate: -1, _id: -1 };
 
-    // ---- execute ----
+    // execute
     const [items, total] = await Promise.all([
       Movie.find(q).sort(sortSpec).skip(skip).limit(limit).lean(),
       Movie.countDocuments(q),
@@ -92,15 +85,12 @@ exports.getMovies = async (req, res, next) => {
       data: items,
     });
   } catch (err) {
-    if (!err.statusCode) err.statusCode = 500;
+    (err as any).statusCode ||= 500;
     next(err);
   }
-};
+}
 
-/**
- * GET /api/movies/:movieId
- */
-exports.getMovie = async (req, res, next) => {
+async function getMovie(req: Request, res: Response, next: NextFunction) {
   try {
     const movie = await Movie.findById(req.params.movieId).lean();
     if (!movie) {
@@ -126,19 +116,18 @@ exports.getMovie = async (req, res, next) => {
       data: movie,
     });
   } catch (err) {
-    if (!err.statusCode) err.statusCode = 500;
+    (err as any).statusCode ||= 500;
     next(err);
   }
-};
+}
 
-/**
- * GET /api/movies/genres
- * Returns distinct genres (lowercased) with counts.
- * Defensive against missing/empty/non-array fields and provides diagnostics.
- */
-exports.getDistinctGenres = async (req, res, next) => {
+async function getDistinctGenres(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
   try {
-    // Aggregate genres from array form
+    // genres from array
     const rows = await Movie.aggregate([
       {
         $project: {
@@ -169,7 +158,7 @@ exports.getDistinctGenres = async (req, res, next) => {
       { $limit: 500 },
     ]);
 
-    // Aggregate genres if stored as single string "genre" (rare/fallback)
+    // single-string fallback “genre”
     const single = await Movie.aggregate([
       {
         $project: {
@@ -188,8 +177,8 @@ exports.getDistinctGenres = async (req, res, next) => {
       { $limit: 500 },
     ]);
 
-    // Merge results
-    const map = new Map();
+    // merge
+    const map = new Map<string, number>();
     for (const r of rows) map.set(r._id, (map.get(r._id) || 0) + r.count);
     for (const r of single) map.set(r._id, (map.get(r._id) || 0) + r.count);
 
@@ -198,7 +187,7 @@ exports.getDistinctGenres = async (req, res, next) => {
       .map(([genre, count]) => ({ genre, count }))
       .sort((a, b) => b.count - a.count);
 
-    // Diagnostics
+    // diagnostics
     const [total, withGenresArray, withGenreString] = await Promise.all([
       Movie.countDocuments({}),
       Movie.countDocuments({
@@ -223,7 +212,18 @@ exports.getDistinctGenres = async (req, res, next) => {
       data: merged,
     });
   } catch (err) {
-    if (!err.statusCode) err.statusCode = 500;
+    (err as any).statusCode ||= 500;
     next(err);
   }
+}
+
+const movieController = {
+  getMovies,
+  getMovie,
+  getDistinctGenres,
+  // createMovie,
+  // updateMovie,
+  // deleteMovie,
 };
+
+export default movieController;

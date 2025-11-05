@@ -1,15 +1,14 @@
-// utils/query.js
+// src/utils/query.ts
 
-const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// Escape a string for safe use inside a RegExp
+const escapeRegex = (s: string): string =>
+  s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-/**
- * Convert bracket operators from a (possibly nested) query object into
- * a Mongo condition object. Supports:
- *   - gt, gte, lt, lte, ne, in, nin, eq
- *   - Arrays for "in"/"nin" split by comma
- *   - Coercion for dateFields/numberFields
- */
-const opsMap = {
+type OpsKey = 'gt' | 'gte' | 'lt' | 'lte' | 'ne' | 'in' | 'nin' | 'eq';
+const opsMap: Record<
+  OpsKey,
+  '$gt' | '$gte' | '$lt' | '$lte' | '$ne' | '$in' | '$nin' | '$eq'
+> = {
   gt: '$gt',
   gte: '$gte',
   lt: '$lt',
@@ -20,50 +19,75 @@ const opsMap = {
   eq: '$eq',
 };
 
-function coerceValue(field, val, dateFields, numberFields) {
+type BuildBracketOpts = {
+  dateFields?: string[];
+  numberFields?: string[];
+  arrayFields?: string[];
+};
+
+const coerceValue = (
+  field: string,
+  val: unknown,
+  dateFields: Set<string>,
+  numberFields: Set<string>
+): unknown => {
   if (dateFields.has(field)) {
-    const coerce = (v) => new Date(v);
+    const coerce = (v: unknown) => new Date(String(v));
     return Array.isArray(val) ? val.map(coerce) : coerce(val);
   }
   if (numberFields.has(field)) {
-    const coerce = (v) => Number(v);
+    const coerce = (v: unknown) => Number(v);
     return Array.isArray(val) ? val.map(coerce) : coerce(val);
   }
   return val;
-}
+};
 
-function ensureArray(val) {
-  if (Array.isArray(val)) return val;
+const ensureArray = (val: unknown): string[] => {
+  if (Array.isArray(val)) return val as string[];
   if (val == null) return [];
   return String(val)
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
-}
+};
 
-exports.buildBracketFilter = (query, opts = {}) => {
+/**
+ * Convert bracket operators from a (possibly nested) query object into
+ * a Mongo condition object. Supports:
+ *  - gt, gte, lt, lte, ne, in, nin, eq
+ *  - Arrays for "in"/"nin" split by comma
+ *  - Coercion for dateFields/numberFields
+ */
+export const buildBracketFilter = (
+  query: Record<string, any>,
+  opts: BuildBracketOpts = {}
+): Record<string, any> => {
   const dateFields = new Set(opts.dateFields || []);
   const numberFields = new Set(opts.numberFields || []);
   const arrayFields = new Set(opts.arrayFields || []);
 
-  const out = {};
+  const out: Record<string, any> = {};
 
   // Walk top-level keys. Some values may be nested objects like { field: { gte: '...' } }
   for (const [field, value] of Object.entries(query)) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
 
     // Look for operator keys inside the nested object
-    const entries = Object.entries(value).filter(([op]) => opsMap[op]);
+    const entries = Object.entries(value).filter(
+      ([op]) => (opsMap as any)[op as OpsKey]
+    ) as Array<[OpsKey, unknown]>;
     if (entries.length === 0) continue;
 
     for (const [op, raw] of entries) {
-      let v = raw;
+      let v: unknown = raw;
 
       if (op === 'in' || op === 'nin') {
         v = ensureArray(v);
         // Case-insensitive list membership for genres
         if (field === 'genres') {
-          v = v.map((val) => new RegExp(`^${escapeRegex(val)}$`, 'i'));
+          v = (v as string[]).map(
+            (val) => new RegExp(`^${escapeRegex(val)}$`, 'i')
+          );
         }
       }
 
@@ -89,15 +113,17 @@ exports.buildBracketFilter = (query, opts = {}) => {
  * Supports:
  *  - name|title (case-insensitive contains) -> title regex
  *  - studio (case-insensitive exact)        -> distributor regex ^...$
- *  - genre  (case-insensitive in array)     -> genres $elemMatch /.../i
+ *  - genre  (case-insensitive in array)     -> genres $elemMatch /.../i OR single 'genre'
  *  - releaseDateStart/End (ISO or yyyy-mm-dd) -> releaseDate $gte/$lte
  */
-exports.buildFriendlyMovieFilter = (query) => {
-  const q = {};
+export const buildFriendlyMovieFilter = (
+  query: Record<string, any>
+): Record<string, any> => {
+  const q: Record<string, any> = {};
   const { name, title, studio, genre, releaseDateStart, releaseDateEnd } =
     query;
 
-  const term = (title || name || '').trim();
+  const term = String(title || name || '').trim();
   if (term) q.title = { $regex: escapeRegex(term), $options: 'i' };
 
   if (studio && String(studio).trim()) {
@@ -105,14 +131,14 @@ exports.buildFriendlyMovieFilter = (query) => {
     q.distributor = { $regex: `^${escapeRegex(s)}$`, $options: 'i' };
   }
 
-  // ---- robust genre matching: match array "genres" OR single "genre" field ----
+  // robust genre matching: match array "genres" OR single "genre" field
   if (genre && String(genre).trim()) {
     const g = String(genre).trim();
     const re = new RegExp(`^${escapeRegex(g)}$`, 'i');
 
     q.$or = [
       { genres: { $elemMatch: { $regex: re } } }, // genres: ['Short', 'Western']
-      { genre: { $regex: re } }, // genre: 'Western'  (if any docs use this)
+      { genre: { $regex: re } }, // genre: 'Western' (fallback)
     ];
   }
 
@@ -129,8 +155,14 @@ exports.buildFriendlyMovieFilter = (query) => {
  * Merge (shallow) two condition objects so that operators on the same field
  * are combined rather than overwritten.
  */
-exports.mergeConditions = (base, patch) => {
-  const out = { ...base };
+export const mergeConditions = <
+  T extends Record<string, any>,
+  U extends Record<string, any>
+>(
+  base: T,
+  patch: U
+): T & U => {
+  const out: Record<string, any> = { ...base };
   for (const [field, cond] of Object.entries(patch || {})) {
     if (cond && typeof cond === 'object' && !Array.isArray(cond)) {
       out[field] = Object.assign({}, out[field] || {}, cond);
@@ -138,5 +170,5 @@ exports.mergeConditions = (base, patch) => {
       out[field] = cond;
     }
   }
-  return out;
+  return out as T & U;
 };
