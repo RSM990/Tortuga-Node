@@ -7,16 +7,14 @@ import League, { LeagueDoc } from '../models/League.js';
 import Studio from '../models/Studio.js';
 import StudioOwner from '../models/StudioOwner.js';
 import User from '../models/User.js';
+import {
+  nextAvailableLeagueSlugAgg,
+  assignLeagueSlugAtomic,
+} from '../services/slugService.js';
+import { toSlug } from '../utils/slug.js';
 
 const router = Router();
 const { Types } = mongoose;
-
-const toSlug = (s: string) =>
-  String(s || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
 
 // ---------- HELPERS ----------
 
@@ -90,33 +88,31 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 });
 
 // POST /leagues  (owner = current user)
-router.post(
-  '/',
-  isAuth,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const userId = (req as any).userId as string;
-      const body: any = { ...req.body };
-      body.slug = body.slug ? toSlug(body.slug) : toSlug(body.name);
-      body.ownerId = userId; // set owner automatically
-      body.commissionerIds = body.commissionerIds ?? []; // optional seed
+router.post('/', isAuth, async (req, res, next) => {
+  try {
+    const userId = (req as any).userId as string;
+    const body: any = { ...req.body };
+    const baseName = body.slug ? body.slug : body.name;
 
-      const exists = await League.findOne({ slug: body.slug }).lean();
-      if (exists)
-        return res
-          .status(409)
-          .json({ message: 'League slug already exists. Choose another.' });
+    const created = await assignLeagueSlugAtomic(
+      baseName,
+      async (uniqueSlug) => {
+        body.slug = uniqueSlug;
+        body.ownerId = userId;
+        body.commissionerIds = body.commissionerIds ?? [];
+        const league = await League.create(body);
+        await User.findByIdAndUpdate(userId, {
+          $addToSet: { leagues: league._id },
+        });
+        return league;
+      }
+    );
 
-      const league = await League.create(body);
-      await User.findByIdAndUpdate(userId, {
-        $addToSet: { leagues: league._id },
-      });
-      return res.status(201).json(league);
-    } catch (e) {
-      next(e);
-    }
+    return res.status(201).json(created);
+  } catch (e) {
+    next(e);
   }
-);
+});
 
 // GET /leagues/:idOrSlug  (id OR slug)
 router.get(
@@ -269,4 +265,14 @@ router.get('/:idOrSlug/standings', async (req, res, next) => {
   }
 });
 
+// GET /leagues/slug/check?name=<nameOrSlug>
+router.get('/slug/check', async (req, res, next) => {
+  try {
+    const raw = String(req.query.name || req.query.slug || '');
+    const result = await nextAvailableLeagueSlugAgg(raw);
+    res.json(result); // { base, suggested, count, isAvailable }
+  } catch (e) {
+    next(e);
+  }
+});
 export default router;
