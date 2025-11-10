@@ -4,8 +4,14 @@ import isAuth from '../middleware/is-auth.js';
 import requireCommissioner from '../middleware/require-commissioner.js';
 import Studio, { StudioDoc } from '../models/Studio.js';
 import StudioOwner from '../models/StudioOwner.js';
+import * as StudiosController from '../controllers/studios.js';
 
 const router = Router();
+
+// ---------- NEW GET endpoints ----------
+router.get('/:idOrSlug', isAuth, StudiosController.getStudio);
+router.get('/:idOrSlug/movies', isAuth, StudiosController.getStudioMovies);
+router.get('/:idOrSlug/awards', isAuth, StudiosController.getStudioAwards);
 
 // POST /studios  (commissioner/owner can create; creator becomes owner of the studio)
 router.post(
