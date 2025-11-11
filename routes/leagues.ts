@@ -28,7 +28,6 @@ function parseIntOr<T extends number>(val: any, fallback: T): T {
 }
 
 function parseSort(sort?: string): Record<string, 1 | -1> {
-  // Examples: "createdAt_desc", "name_asc"
   const raw = (sort || '').trim();
   if (!raw) return { createdAt: -1 };
   const [key, dirRaw] = raw.split('_');
@@ -41,51 +40,82 @@ function isObjectIdLike(s: string) {
   return Types.ObjectId.isValid(s);
 }
 
+/**
+ * Distinct leagueIds where the user has a studio (membership).
+ */
+async function memberLeagueIdsFor(userId: string): Promise<Types.ObjectId[]> {
+  const ids = await StudioOwner.find({ userId }).distinct('leagueId').lean();
+  // Normalize to ObjectIds
+  return ids
+    .filter(Boolean)
+    .map((x: any) => (Types.ObjectId.isValid(x) ? new Types.ObjectId(x) : x));
+}
+
+/**
+ * Builds the $or membership clause for queries:
+ * - owner
+ * - commissioner
+ * - member via StudioOwner
+ * - (optional) leagues array on User (if you keep that relationship)
+ */
+function membershipOrClause(userId: string, memberLeagueIds: Types.ObjectId[]) {
+  const or: any[] = [
+    { ownerId: userId },
+    { commissionerIds: userId },
+    { _id: { $in: memberLeagueIds } },
+  ];
+  return { $or: or };
+}
+
 // ---------- ROUTES ----------
 
 // GET /leagues  → list with pagination & filters
-// Supports: ?page=1&limit=12&q=&visibility=public|private|unlisted&sort=createdAt_desc
-router.get('/', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const page = parseIntOr(req.query.page, 1);
-    const limit = parseIntOr(req.query.limit, 12);
-    const q = String(req.query.q ?? '').trim();
-    const visibility = String(req.query.visibility ?? '').trim();
-    const sort = parseSort(String(req.query.sort ?? ''));
+// NOW: auth required; returns only leagues user belongs to
+// Supports: ?page=1&limit=12&q=&visibility=private|unlisted|public&sort=createdAt_desc
+router.get(
+  '/',
+  isAuth,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = (req as any).userId as string;
+      const page = parseIntOr(req.query.page, 1);
+      const limit = parseIntOr(req.query.limit, 12);
+      const q = String(req.query.q ?? '').trim();
+      const visibility = String(req.query.visibility ?? '').trim();
+      const sort = parseSort(String(req.query.sort ?? ''));
 
-    const filter: any = {};
+      const memberIds = await memberLeagueIdsFor(userId);
 
-    // Basic search on name or slug
-    if (q) {
-      const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-      filter.$or = [{ name: regex }, { slug: regex }];
+      const filter: any = membershipOrClause(userId, memberIds);
+
+      // Basic search on name or slug
+      if (q) {
+        const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        filter.$and = (filter.$and || []).concat([
+          { $or: [{ name: regex }, { slug: regex }] },
+        ]);
+      }
+
+      // Optional visibility filter (still scoped to membership)
+      if (visibility && allowedVis.has(visibility)) {
+        filter.$and = (filter.$and || []).concat([{ visibility }]);
+      }
+
+      const [data, total] = await Promise.all([
+        League.find(filter)
+          .sort(sort)
+          .skip((page - 1) * limit)
+          .limit(limit)
+          .lean(),
+        League.countDocuments(filter),
+      ]);
+
+      return res.json({ data, page, limit, total });
+    } catch (e) {
+      next(e);
     }
-
-    // Optional visibility filter (only if valid)
-    if (visibility && allowedVis.has(visibility)) {
-      filter.visibility = visibility;
-    }
-
-    // NOTE: If you later add sport/season fields to League, you can enable:
-    // const sport = String(req.query.sport ?? '').trim();
-    // const season = String(req.query.season ?? '').trim();
-    // if (sport) filter.sport = sport;
-    // if (season) filter.season = season;
-
-    const [data, total] = await Promise.all([
-      League.find(filter)
-        .sort(sort)
-        .skip((page - 1) * limit)
-        .limit(limit)
-        .lean(),
-      League.countDocuments(filter),
-    ]);
-
-    return res.json({ data, page, limit, total });
-  } catch (e) {
-    next(e);
   }
-});
+);
 
 // POST /leagues  (owner = current user)
 router.post('/', isAuth, async (req, res, next) => {
@@ -114,17 +144,25 @@ router.post('/', isAuth, async (req, res, next) => {
   }
 });
 
-// GET /leagues/:idOrSlug  (id OR slug)
+// GET /leagues/:idOrSlug  → details
+// NOW: auth required; must be a member/owner/commissioner
 router.get(
   '/:idOrSlug',
+  isAuth,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const userId = (req as any).userId as string;
       const { idOrSlug } = req.params;
-      const query = isObjectIdLike(idOrSlug)
+      const by = isObjectIdLike(idOrSlug)
         ? { _id: idOrSlug }
         : { slug: idOrSlug };
 
-      const league = await League.findOne(query).lean();
+      const memberIds = await memberLeagueIdsFor(userId);
+      const league = await League.findOne({
+        ...by,
+        ...membershipOrClause(userId, memberIds),
+      }).lean();
+
       if (!league) return res.status(404).json({ message: 'Not found' });
       res.json(league);
     } catch (e) {
@@ -147,10 +185,11 @@ router.patch(
       const isComm = league.commissionerIds?.some(
         (id: any) => String(id) === String(userId)
       );
-      if (!isOwner && !isComm)
+      if (!isOwner && !isComm) {
         return res
           .status(403)
           .json({ message: 'Commissioner or owner role required' });
+      }
 
       const { slug, ownerId, commissionerIds, ...rest } = req.body ?? {};
       const update: any = { ...rest };
@@ -185,13 +224,22 @@ router.patch(
   }
 );
 
-// GET /leagues/:idOrSlug/members
-router.get('/:idOrSlug/members', async (req, res, next) => {
+// GET /leagues/:idOrSlug/members  → members listing
+// NOW: auth required + membership check
+router.get('/:idOrSlug/members', isAuth, async (req, res, next) => {
   try {
+    const userId = (req as any).userId as string;
     const { idOrSlug } = req.params;
-    const league = await League.findOne(
-      Types.ObjectId.isValid(idOrSlug) ? { _id: idOrSlug } : { slug: idOrSlug }
-    ).lean();
+    const by = isObjectIdLike(idOrSlug)
+      ? { _id: idOrSlug }
+      : { slug: idOrSlug };
+
+    // authorize
+    const memberIds = await memberLeagueIdsFor(userId);
+    const league = await League.findOne({
+      ...by,
+      ...membershipOrClause(userId, memberIds),
+    }).lean();
     if (!league) return res.status(404).json({ message: 'Not found' });
 
     // Join StudioOwner -> User + Studio
@@ -201,7 +249,7 @@ router.get('/:idOrSlug/members', async (req, res, next) => {
 
     const [users, studios] = await Promise.all([
       User.find({ _id: { $in: userIds } })
-        .select('_id displayName name username email') // 👈 grab alternates
+        .select('_id displayName name username email')
         .lean(),
       Studio.find({ _id: { $in: studioIds } })
         .select('_id name')
@@ -225,7 +273,7 @@ router.get('/:idOrSlug/members', async (req, res, next) => {
         user: { _id: String(l.userId), displayName },
         studioId: String(l.studioId),
         studioName: studio?.name ?? 'Unknown Studio',
-        roleInStudio: l.roleInStudio,
+        roleInStudio: (l as any).roleInStudio,
       };
     });
 
@@ -236,25 +284,32 @@ router.get('/:idOrSlug/members', async (req, res, next) => {
 });
 
 // GET /leagues/:idOrSlug/standings
-router.get('/:idOrSlug/standings', async (req, res, next) => {
+// NOW: auth required + membership check
+router.get('/:idOrSlug/standings', isAuth, async (req, res, next) => {
   try {
+    const userId = (req as any).userId as string;
     const { idOrSlug } = req.params;
-    const league = await League.findOne(
-      Types.ObjectId.isValid(idOrSlug) ? { _id: idOrSlug } : { slug: idOrSlug }
-    ).lean<LeagueDoc>();
+    const by = isObjectIdLike(idOrSlug)
+      ? { _id: idOrSlug }
+      : { slug: idOrSlug };
+
+    // authorize
+    const memberIds = await memberLeagueIdsFor(userId);
+    const league = await League.findOne({
+      ...by,
+      ...membershipOrClause(userId, memberIds),
+    }).lean<LeagueDoc>();
     if (!league) return res.status(404).json({ message: 'Not found' });
 
     // TODO: replace with real aggregation of points per studio
     const studios = await Studio.find({ leagueId: league._id }).lean();
 
-    // Mock points = 0 (placeholder); replace with real totals when available
     const rows = studios.map((s) => ({
       studioId: String(s._id),
       studioName: s.name,
       points: 0,
     }));
 
-    // Rank descending by points
     rows.sort((a, b) => b.points - a.points);
     let rank = 1;
     const standings = rows.map((r) => ({ ...r, rank: rank++ }));
@@ -265,7 +320,7 @@ router.get('/:idOrSlug/standings', async (req, res, next) => {
   }
 });
 
-// GET /leagues/slug/check?name=<nameOrSlug>
+// GET /leagues/slug/check?name=<nameOrSlug>  (public)
 router.get('/slug/check', async (req, res, next) => {
   try {
     const raw = String(req.query.name || req.query.slug || '');
@@ -275,4 +330,5 @@ router.get('/slug/check', async (req, res, next) => {
     next(e);
   }
 });
+
 export default router;
