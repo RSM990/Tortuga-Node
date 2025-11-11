@@ -62,4 +62,25 @@ router.patch(
   authController.updatePassword
 );
 
+/**
+ * GET /api/auth/check-email?email=foo@bar.com
+ * Returns: { available: boolean }
+ */
+router.get('/check-email', async (req, res) => {
+  const raw = String(req.query.email || '')
+    .trim()
+    .toLowerCase();
+  if (!raw)
+    return res.status(400).json({ available: false, reason: 'missing-email' });
+
+  try {
+    const exists = await User.exists({ email: raw });
+    return res.json({ available: !exists });
+  } catch (err) {
+    // Fail-open is OK for UX; log for ops
+    console.error('check-email error', err);
+    return res.status(200).json({ available: true });
+  }
+});
+
 export default router;
