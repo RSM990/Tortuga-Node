@@ -121,6 +121,7 @@ import awards from './routes/awards.js';
 import compute from './routes/compute.js';
 import testRoutes from './routes/test.js';
 import devRoutes from './routes/dev.js';
+import studioRoutes from './routes/studios.js';
 
 app.use('/api/auth', authRoutes);
 app.use('/api/movies', movieRoutes);
@@ -131,7 +132,7 @@ app.use('/api/studios', studios);
 app.use('/api/ownership', ownership);
 app.use('/api', awards);
 app.use('/api', compute);
-
+app.use('/api', studioRoutes); // Routes already include /leagues/:id prefix
 app.use('/api/test', testRoutes);
 app.use('/api', devRoutes);
 

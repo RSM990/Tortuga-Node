@@ -6,12 +6,7 @@ import {
   buildFriendlyMovieFilter,
   mergeConditions,
 } from '../utils/query.js';
-
-// Helpers
-const toInt = (val: unknown, def: number) => {
-  const n = parseInt(String(val ?? ''), 10);
-  return Number.isFinite(n) && n > 0 ? n : def;
-};
+import { paginatedResponse, parsePaginationParams } from '../utils/response.js';
 
 // Convert plain value to case-insensitive exact-match RegExp
 const toCiExact = (val: unknown): RegExp =>
@@ -24,22 +19,19 @@ const toCiExact = (val: unknown): RegExp =>
 
 async function getMovies(req: Request, res: Response, next: NextFunction) {
   try {
-    // paging
-    const page = Math.max(toInt(req.query.page, 1), 1);
-    const limit = Math.max(toInt(req.query.limit, 20), 1);
-    const skip = (page - 1) * limit;
+    // Parse and validate pagination params
+    const { page, limit, skip } = parsePaginationParams(req.query);
 
-    // filters
+    // Build filters
     const friendly = buildFriendlyMovieFilter(req.query as Record<string, any>);
     const bracket = buildBracketFilter(req.query as Record<string, any>, {
       dateFields: ['releaseDate'],
       arrayFields: ['genres'],
-      // numberFields: [] // extend later
     });
 
     let q: Record<string, any> = mergeConditions(friendly, bracket);
 
-    // normalize genres[in]
+    // Normalize genres[in]
     if (
       q.genres &&
       q.genres.$in &&
@@ -53,37 +45,27 @@ async function getMovies(req: Request, res: Response, next: NextFunction) {
         arr.flatMap((val: unknown) => {
           const re = toCiExact(val);
           return [
-            { genres: { $elemMatch: { $regex: re } } }, // genres: string[]
-            { genre: { $regex: re } }, // genre: string (fallback shape)
+            { genres: { $elemMatch: { $regex: re } } },
+            { genre: { $regex: re } },
           ];
         })
       );
     }
 
-    // sorting
+    // Sorting
     const sort = String(req.query.sort ?? '');
     let sortSpec: Record<string, 1 | -1> = { releaseDate: -1, _id: -1 };
     if (sort === 'releaseDate_asc') sortSpec = { releaseDate: 1, _id: 1 };
     if (sort === 'releaseDate_desc') sortSpec = { releaseDate: -1, _id: -1 };
 
-    // execute
+    // Execute query
     const [items, total] = await Promise.all([
       Movie.find(q).sort(sortSpec).skip(skip).limit(limit).lean(),
       Movie.countDocuments(q),
     ]);
 
-    const totalPages = Math.max(1, Math.ceil(total / limit));
-
-    return res.json({
-      meta: {
-        success: true,
-        message: 'Movies fetched successfully.',
-        page,
-        total,
-        totalPages,
-      },
-      data: items,
-    });
+    // ✅ STANDARDIZED RESPONSE
+    return res.json(paginatedResponse(items, page, limit, total));
   } catch (err) {
     (err as any).statusCode ||= 500;
     next(err);
@@ -94,27 +76,10 @@ async function getMovie(req: Request, res: Response, next: NextFunction) {
   try {
     const movie = await Movie.findById(req.params.movieId).lean();
     if (!movie) {
-      return res.status(404).json({
-        meta: {
-          success: false,
-          message: 'Movie not found',
-          page: 1,
-          total: 0,
-          totalPages: 1,
-        },
-        data: null,
-      });
+      return res.status(404).json({ message: 'Movie not found' });
     }
-    return res.json({
-      meta: {
-        success: true,
-        message: 'Movie fetched',
-        page: 1,
-        total: 1,
-        totalPages: 1,
-      },
-      data: movie,
-    });
+    // Single resource - just return the object
+    return res.json(movie);
   } catch (err) {
     (err as any).statusCode ||= 500;
     next(err);
@@ -127,7 +92,7 @@ async function getDistinctGenres(
   next: NextFunction
 ) {
   try {
-    // genres from array
+    // Genres from array field
     const rows = await Movie.aggregate([
       {
         $project: {
@@ -158,7 +123,7 @@ async function getDistinctGenres(
       { $limit: 500 },
     ]);
 
-    // single-string fallback “genre”
+    // Single-string fallback "genre" field
     const single = await Movie.aggregate([
       {
         $project: {
@@ -177,7 +142,7 @@ async function getDistinctGenres(
       { $limit: 500 },
     ]);
 
-    // merge
+    // Merge and deduplicate
     const map = new Map<string, number>();
     for (const r of rows) map.set(r._id, (map.get(r._id) || 0) + r.count);
     for (const r of single) map.set(r._id, (map.get(r._id) || 0) + r.count);
@@ -187,30 +152,8 @@ async function getDistinctGenres(
       .map(([genre, count]) => ({ genre, count }))
       .sort((a, b) => b.count - a.count);
 
-    // diagnostics
-    const [total, withGenresArray, withGenreString] = await Promise.all([
-      Movie.countDocuments({}),
-      Movie.countDocuments({
-        genres: { $exists: true, $type: 'array', $not: { $size: 0 } },
-      }),
-      Movie.countDocuments({ genre: { $exists: true, $ne: '' } }),
-    ]);
-
-    return res.json({
-      meta: {
-        success: true,
-        message: 'Distinct genres',
-        page: 1,
-        total: merged.length,
-        totalPages: 1,
-        diagnostics: {
-          totalDocs: total,
-          hasGenresArray: withGenresArray,
-          hasGenreString: withGenreString,
-        },
-      },
-      data: merged,
-    });
+    // Return as simple array (not paginated)
+    return res.json(merged);
   } catch (err) {
     (err as any).statusCode ||= 500;
     next(err);
@@ -221,9 +164,9 @@ const movieController = {
   getMovies,
   getMovie,
   getDistinctGenres,
-  // createMovie,
-  // updateMovie,
-  // deleteMovie,
+  // createMovie,    // TODO: implement when needed
+  // updateMovie,    // TODO: implement when needed
+  // deleteMovie,    // TODO: implement when needed
 };
 
 export default movieController;
