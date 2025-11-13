@@ -20,23 +20,23 @@ if [ -f /home/ec2-user/.tortuga_env ]; then
   source /home/ec2-user/.tortuga_env
 fi
 
-# Update PM2 if out of date
+# Stop ALL existing processes and clear saved state
+echo "Stopping all PM2 processes and clearing saved state..."
+pm2 delete all || true
+pm2 save --force  # Clear the saved process list
+pm2 kill          # Kill PM2 daemon to start fresh
+
+# Update PM2 (now with clean state)
 echo "Updating PM2..."
 pm2 update || true
 
-# Stop any existing process
-echo "Stopping any existing PM2 processes..."
-pm2 delete tortuga-app || true
-
-# Start app directly (no ecosystem file)
+# Start app directly with correct path
 echo "Starting app with PM2..."
 pm2 start dist/server.js \
   --name tortuga-app \
-  --node-args="--max-old-space-size=2048" \
-  -i 1 \
-  --no-autorestart false
+  --node-args="--max-old-space-size=2048"
 
-# Save state
+# Save NEW state
 echo "Saving PM2 process list..."
 pm2 save
 
@@ -51,23 +51,29 @@ fi
 echo "Waiting for server to start..."
 sleep 5
 
-# Test health check
+# Test health check with retries
 echo "Testing health check..."
-MAX_RETRIES=5
+MAX_RETRIES=10
 RETRY=0
 
 while [ $RETRY -lt $MAX_RETRIES ]; do
-  if curl -f http://localhost:3000/healthz; then
+  if curl -f -s http://localhost:3000/healthz > /dev/null 2>&1; then
     echo "✅ Server started successfully!"
+    curl http://localhost:3000/healthz
+    echo ""
     pm2 status
     exit 0
   else
     RETRY=$((RETRY+1))
     echo "Health check attempt $RETRY/$MAX_RETRIES failed, waiting..."
-    sleep 2
+    sleep 3
   fi
 done
 
-echo "❌ Health check failed after $MAX_RETRIES attempts - showing logs:"
-pm2 logs tortuga-app --lines 50
+echo "❌ Health check failed after $MAX_RETRIES attempts"
+echo "PM2 Status:"
+pm2 status
+echo ""
+echo "PM2 Logs:"
+pm2 logs tortuga-app --lines 50 --nostream
 exit 1
