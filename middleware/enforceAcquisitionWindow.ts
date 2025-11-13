@@ -1,11 +1,16 @@
 // middleware/enforceAcquisitionWindow.ts
 import { DateTime } from 'luxon';
-import League from '../models/league';
+import League, { LeagueDoc } from '../models/League.js';
+import { Request, Response, NextFunction } from 'express';
 
-export async function enforceAcquisitionWindow(req, res, next) {
+export async function enforceAcquisitionWindow(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
   const leagueId = req.params.leagueId || req.body.leagueId;
-  const league = await League.findById(leagueId).lean();
-  const tz = league?.timezone || 'America/New_York';
+  const league = await League.findById(leagueId).lean<LeagueDoc>();
+  const tz: string = (league?.timezone as string) || 'America/New_York'; // ← Add type annotation
   const now = DateTime.now().setZone(tz);
   const isLocked =
     (now.weekday === 5 && now.hour >= 20) || // Thu >= 8pm

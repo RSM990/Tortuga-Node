@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { Request, Response, NextFunction } from 'express';
-import mongoose from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 import isAuth from '../middleware/is-auth.js';
 import requireCommissioner from '../middleware/require-commissioner.js'; // (unused here but kept if you need later)
 import League, { LeagueDoc } from '../models/League.js';
@@ -14,7 +14,6 @@ import {
 import { toSlug } from '../utils/slug.js';
 
 const router = Router();
-const { Types } = mongoose;
 
 // ---------- HELPERS ----------
 
@@ -239,7 +238,7 @@ router.get('/:idOrSlug/members', isAuth, async (req, res, next) => {
     const league = await League.findOne({
       ...by,
       ...membershipOrClause(userId, memberIds),
-    }).lean();
+    }).lean<LeagueDoc>();
     if (!league) return res.status(404).json({ message: 'Not found' });
 
     // Join StudioOwner -> User + Studio

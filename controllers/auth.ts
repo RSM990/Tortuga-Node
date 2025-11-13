@@ -3,7 +3,7 @@ import type { Request, Response, NextFunction, CookieOptions } from 'express';
 import { validationResult } from 'express-validator';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import User from '../models/user.js';
+import User from '../models/User.js';
 
 const SESSION_SECRET = process.env.SESSION_SECRET ?? 'somesupersecretsecret';
 

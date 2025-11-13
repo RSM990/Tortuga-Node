@@ -2,7 +2,7 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
 
-import User from '../models/user.js'; // make sure filename/casing matches
+import User from '../models/User.js'; // make sure filename/casing matches
 import authController from '../controllers/auth.js'; // default export with handlers
 import isAuth from '../middleware/is-auth.js'; // default export middleware
 

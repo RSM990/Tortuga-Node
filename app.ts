@@ -104,7 +104,7 @@ app.use((req, res, next) =>
 );
 
 // static
-app.use(express.static(path.join(__dirname, '../public')));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // session (skip health) — connect-mongodb-session in ESM
 // Wrap in try-catch to prevent session store errors from crashing the app

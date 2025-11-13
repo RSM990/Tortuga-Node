@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import Season from '../models/season';
+import Season from '../models/Season.js';
 
 const router = Router();
 

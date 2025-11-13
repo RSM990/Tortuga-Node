@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import MovieOwnership from '../models/movieOwnership';
-import { enforceAcquisitionWindow } from '../middleware/enforceAcquisitionWindow';
+import MovieOwnership from '../models/MovieOwnership.js';
+import { enforceAcquisitionWindow } from '../middleware/enforceAcquisitionWindow.js';
 
 const router = Router();
 
