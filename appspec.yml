@@ -19,6 +19,9 @@ hooks:
     - location: scripts/install_dependencies.sh
       timeout: 300
       runas: ec2-user
+    - location: scripts/build.sh
+      timeout: 300
+      runas: ec2-user
 
   ApplicationStart:
     - location: scripts/load_secrets.sh # ⬅️ new

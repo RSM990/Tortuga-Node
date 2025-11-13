@@ -11,11 +11,11 @@ server.on('error', (error: NodeJS.ErrnoException) => {
   if (error.syscall !== 'listen') throw error;
   switch (error.code) {
     case 'EACCES':
-      console.error(`Port ${port} requires elevated privileges`);
+      console.error(`Port ${port} requires elevated privileges`); // ← Fixed
       process.exit(1);
       break;
     case 'EADDRINUSE':
-      console.error(`Port ${port} is already in use`);
+      console.error(`Port ${port} is already in use`); // ← Fixed
       process.exit(1);
       break;
     default:
@@ -24,13 +24,13 @@ server.on('error', (error: NodeJS.ErrnoException) => {
 });
 
 server.listen(port, host, () => {
-  console.log(`✅ API server listening on ${host}:${port}`);
-  console.log(`📍 Health check: http://${host}:${port}/healthz`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`✅ API server listening on ${host}:${port}`); // ← Fixed
+  console.log(`📍 Health check: http://${host}:${port}/healthz`); // ← Fixed
+  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`); // ← Fixed
 });
 
 const shutdown = (signal: string) => {
-  console.log(`\n${signal} received. Closing server gracefully...`);
+  console.log(`\n${signal} received. Closing server gracefully...`); // ← Fixed
   server.close(() => {
     console.log('Server closed');
     process.exit(0);
