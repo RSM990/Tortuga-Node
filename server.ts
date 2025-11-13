@@ -32,11 +32,11 @@ server.listen(port, host, () => {
 const shutdown = (signal: string) => {
   console.log(`\n${signal} received. Closing server gracefully...`); // ← Fixed
   server.close(() => {
-    console.log('Server closed');
+    console.log('Server closed!');
     process.exit(0);
   });
   setTimeout(() => {
-    console.error('Forced shutdown after timeout');
+    console.error('Forced shutdown after timeout!');
     process.exit(1);
   }, 10000);
 };
