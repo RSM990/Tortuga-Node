@@ -7,6 +7,7 @@ cd /home/ec2-user/Tortuga-Node
 
 # Set environment
 export NODE_ENV=production
+export PORT=3000
 
 # Debug info
 echo "Node version: $(node -v)"
@@ -19,13 +20,21 @@ if [ -f /home/ec2-user/.tortuga_env ]; then
   source /home/ec2-user/.tortuga_env
 fi
 
+# Update PM2 if out of date
+echo "Updating PM2..."
+pm2 update || true
+
 # Stop any existing process
 echo "Stopping any existing PM2 processes..."
 pm2 delete tortuga-app || true
 
-# Start using ecosystem file
+# Start app directly (no ecosystem file)
 echo "Starting app with PM2..."
-pm2 start ecosystem.config.js --env production
+pm2 start dist/server.js \
+  --name tortuga-app \
+  --node-args="--max-old-space-size=2048" \
+  -i 1 \
+  --no-autorestart false
 
 # Save state
 echo "Saving PM2 process list..."
@@ -44,12 +53,21 @@ sleep 5
 
 # Test health check
 echo "Testing health check..."
-if curl -f http://localhost:3000/healthz; then
+MAX_RETRIES=5
+RETRY=0
+
+while [ $RETRY -lt $MAX_RETRIES ]; do
+  if curl -f http://localhost:3000/healthz; then
     echo "✅ Server started successfully!"
     pm2 status
-    pm2 logs tortuga-app --lines 10
-else
-    echo "❌ Health check failed - showing logs:"
-    pm2 logs tortuga-app --lines 50
-    exit 1
-fi
+    exit 0
+  else
+    RETRY=$((RETRY+1))
+    echo "Health check attempt $RETRY/$MAX_RETRIES failed, waiting..."
+    sleep 2
+  fi
+done
+
+echo "❌ Health check failed after $MAX_RETRIES attempts - showing logs:"
+pm2 logs tortuga-app --lines 50
+exit 1
