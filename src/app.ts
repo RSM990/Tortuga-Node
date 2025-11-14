@@ -141,9 +141,14 @@ app.use((req, res, next) => {
     console.warn('⚠️ Session store not available, skipping session middleware');
     return next();
   }
-
+  const SESSION_SECRET = process.env.SESSION_SECRET;
+  if (!SESSION_SECRET && process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'SESSION_SECRET environment variable is required in production'
+    );
+  }
   session({
-    secret: process.env.SESSION_SECRET || 'devsecret',
+    secret: SESSION_SECRET || 'devsecret',
     resave: false,
     saveUninitialized: false,
     store: sessionStore,
@@ -169,6 +174,7 @@ import ownershipRoutes from './routes/ownership.js';
 import awardRoutes from './routes/awards.js';
 import computeRoutes from './routes/compute.js';
 import devRoutes from './routes/dev.js';
+import { AppError } from './utils/errors.js';
 
 app.use('/api/auth', authRoutes);
 app.use('/api/movies', movieRoutes);
@@ -200,16 +206,28 @@ app.use((_req, res) => {
 // Global Error Handler
 app.use(
   (
-    err: Error & { status?: number },
+    err: Error | AppError,
     _req: express.Request,
     res: express.Response,
     _next: express.NextFunction
   ) => {
     console.error('❌ Error:', err);
 
-    res.status(err.status || 500).json({
-      error: err.message || 'Internal Server Error',
-      ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+    // Handle AppError instances
+    if (err instanceof AppError) {
+      return res.status(err.statusCode).json({
+        error: err.message,
+        ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+      });
+    }
+
+    // Handle other errors
+    res.status(500).json({
+      error: 'Internal Server Error',
+      ...(process.env.NODE_ENV === 'development' && {
+        message: err.message,
+        stack: err.stack,
+      }),
     });
   }
 );
