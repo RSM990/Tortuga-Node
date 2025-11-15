@@ -1,9 +1,16 @@
-// src/controllers/season.ts
+// src/controllers/season.ts - REFACTORED WITH STANDARDIZED RESPONSES
 import type { Request, Response, NextFunction } from 'express';
 import { validationResult } from 'express-validator';
 import SeasonModel from '../models/Season.js';
 import LeagueModel from '../models/League.js';
-import { paginatedResponse, parsePaginationParams } from '../utils/response.js';
+import {
+  HttpStatus,
+  parsePaginationParams,
+  sendPaginatedResponse,
+  sendSuccessResponse,
+  sendErrorResponse,
+  successResponse,
+} from '../utils/response.js';
 
 const getReqUserId = (req: Request): string | undefined =>
   (req as any).userId as string | undefined;
@@ -12,19 +19,27 @@ const getReqUserId = (req: Request): string | undefined =>
  * Create a new season
  * POST /api/seasons
  */
-async function createSeason(req: Request, res: Response, next: NextFunction) {
+async function createSeason(req: Request, res: Response) {
   try {
+    // ✅ VALIDATION ERRORS
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(422).json({
-        message: 'Validation failed',
-        data: errors.array(),
-      });
+      return sendErrorResponse(
+        res,
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'Validation failed',
+        errors.array().map((err: any) => ({
+          field: err.path || err.param,
+          message: err.msg,
+          code: 'VALIDATION_ERROR',
+        }))
+      );
     }
 
+    // ✅ AUTH CHECK
     const userId = getReqUserId(req);
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return sendErrorResponse(res, HttpStatus.UNAUTHORIZED, 'Unauthorized');
     }
 
     const { leagueId, label, startDate, endDate, weekCount } = req.body;
@@ -34,19 +49,23 @@ async function createSeason(req: Request, res: Response, next: NextFunction) {
       .select('ownerId commissionerIds')
       .lean();
 
+    // ✅ NOT FOUND CHECK
     if (!league) {
-      return res.status(404).json({ message: 'League not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'League not found');
     }
 
+    // ✅ AUTHORIZATION CHECK
     const isOwner = String(league.ownerId) === userId;
     const isComm = league.commissionerIds?.some(
       (id: any) => String(id) === userId
     );
 
     if (!isOwner && !isComm) {
-      return res.status(403).json({
-        message: 'Only league owners or commissioners can create seasons',
-      });
+      return sendErrorResponse(
+        res,
+        HttpStatus.FORBIDDEN,
+        'Only league owners or commissioners can create seasons'
+      );
     }
 
     const season = await SeasonModel.create({
@@ -57,10 +76,17 @@ async function createSeason(req: Request, res: Response, next: NextFunction) {
       weekCount,
     });
 
-    return res.status(201).json(season);
+    // ✅ CREATED RESPONSE (201)
+    return res
+      .status(HttpStatus.CREATED)
+      .json(successResponse(season, undefined, 'Season created successfully'));
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error creating season:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to create season'
+    );
   }
 }
 
@@ -68,16 +94,19 @@ async function createSeason(req: Request, res: Response, next: NextFunction) {
  * Get season by ID
  * GET /api/seasons/:id
  */
-async function getSeason(req: Request, res: Response, next: NextFunction) {
+async function getSeason(req: Request, res: Response) {
   try {
+    // ✅ AUTH CHECK
     const userId = getReqUserId(req);
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return sendErrorResponse(res, HttpStatus.UNAUTHORIZED, 'Unauthorized');
     }
 
     const season = await SeasonModel.findById(req.params.id).lean();
+
+    // ✅ NOT FOUND CHECK
     if (!season) {
-      return res.status(404).json({ message: 'Season not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'Season not found');
     }
 
     // Verify user has access to this season's league
@@ -86,9 +115,10 @@ async function getSeason(req: Request, res: Response, next: NextFunction) {
       .lean();
 
     if (!league) {
-      return res.status(404).json({ message: 'League not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'League not found');
     }
 
+    // ✅ AUTHORIZATION CHECK
     const isOwner = String(league.ownerId) === userId;
     const isComm = league.commissionerIds?.some(
       (id: any) => String(id) === userId
@@ -96,15 +126,18 @@ async function getSeason(req: Request, res: Response, next: NextFunction) {
 
     // TODO: Add StudioOwner membership check for non-commissioners
     if (!isOwner && !isComm) {
-      return res.status(403).json({
-        message: 'Access denied',
-      });
+      return sendErrorResponse(res, HttpStatus.FORBIDDEN, 'Access denied');
     }
 
-    return res.json(season);
+    // ✅ SUCCESS RESPONSE
+    return sendSuccessResponse(res, season);
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error fetching season:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to fetch season'
+    );
   }
 }
 
@@ -112,11 +145,12 @@ async function getSeason(req: Request, res: Response, next: NextFunction) {
  * List seasons for a league
  * GET /api/leagues/:leagueId/seasons
  */
-async function getSeasons(req: Request, res: Response, next: NextFunction) {
+async function getSeasons(req: Request, res: Response) {
   try {
+    // ✅ AUTH CHECK
     const userId = getReqUserId(req);
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return sendErrorResponse(res, HttpStatus.UNAUTHORIZED, 'Unauthorized');
     }
 
     const { leagueId } = req.params;
@@ -127,10 +161,12 @@ async function getSeasons(req: Request, res: Response, next: NextFunction) {
       .select('ownerId commissionerIds')
       .lean();
 
+    // ✅ NOT FOUND CHECK
     if (!league) {
-      return res.status(404).json({ message: 'League not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'League not found');
     }
 
+    // ✅ AUTHORIZATION CHECK
     const isOwner = String(league.ownerId) === userId;
     const isComm = league.commissionerIds?.some(
       (id: any) => String(id) === userId
@@ -138,7 +174,7 @@ async function getSeasons(req: Request, res: Response, next: NextFunction) {
 
     // TODO: Add StudioOwner membership check
     if (!isOwner && !isComm) {
-      return res.status(403).json({ message: 'Access denied' });
+      return sendErrorResponse(res, HttpStatus.FORBIDDEN, 'Access denied');
     }
 
     const query = { leagueId };
@@ -149,10 +185,15 @@ async function getSeasons(req: Request, res: Response, next: NextFunction) {
       SeasonModel.countDocuments(query),
     ]);
 
-    return res.json(paginatedResponse(items, page, limit, total));
+    // ✅ PAGINATED RESPONSE
+    return sendPaginatedResponse(res, items, { page, limit, total });
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error fetching seasons:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to fetch seasons'
+    );
   }
 }
 
@@ -160,16 +201,19 @@ async function getSeasons(req: Request, res: Response, next: NextFunction) {
  * Update season
  * PATCH /api/seasons/:id
  */
-async function updateSeason(req: Request, res: Response, next: NextFunction) {
+async function updateSeason(req: Request, res: Response) {
   try {
+    // ✅ AUTH CHECK
     const userId = getReqUserId(req);
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return sendErrorResponse(res, HttpStatus.UNAUTHORIZED, 'Unauthorized');
     }
 
     const season = await SeasonModel.findById(req.params.id);
+
+    // ✅ NOT FOUND CHECK
     if (!season) {
-      return res.status(404).json({ message: 'Season not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'Season not found');
     }
 
     // Verify user can update (owner or commissioner)
@@ -178,18 +222,21 @@ async function updateSeason(req: Request, res: Response, next: NextFunction) {
       .lean();
 
     if (!league) {
-      return res.status(404).json({ message: 'League not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'League not found');
     }
 
+    // ✅ AUTHORIZATION CHECK
     const isOwner = String(league.ownerId) === userId;
     const isComm = league.commissionerIds?.some(
       (id: any) => String(id) === userId
     );
 
     if (!isOwner && !isComm) {
-      return res.status(403).json({
-        message: 'Only league owners or commissioners can update seasons',
-      });
+      return sendErrorResponse(
+        res,
+        HttpStatus.FORBIDDEN,
+        'Only league owners or commissioners can update seasons'
+      );
     }
 
     const { label, startDate, endDate, weekCount } = req.body;
@@ -201,10 +248,15 @@ async function updateSeason(req: Request, res: Response, next: NextFunction) {
 
     await season.save();
 
-    return res.json(season);
+    // ✅ SUCCESS RESPONSE
+    return sendSuccessResponse(res, season, 'Season updated successfully');
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error updating season:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to update season'
+    );
   }
 }
 
@@ -212,16 +264,19 @@ async function updateSeason(req: Request, res: Response, next: NextFunction) {
  * Delete season
  * DELETE /api/seasons/:id
  */
-async function deleteSeason(req: Request, res: Response, next: NextFunction) {
+async function deleteSeason(req: Request, res: Response) {
   try {
+    // ✅ AUTH CHECK
     const userId = getReqUserId(req);
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return sendErrorResponse(res, HttpStatus.UNAUTHORIZED, 'Unauthorized');
     }
 
     const season = await SeasonModel.findById(req.params.id);
+
+    // ✅ NOT FOUND CHECK
     if (!season) {
-      return res.status(404).json({ message: 'Season not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'Season not found');
     }
 
     // Verify user can delete (owner only, not commissioners)
@@ -230,21 +285,29 @@ async function deleteSeason(req: Request, res: Response, next: NextFunction) {
       .lean();
 
     if (!league) {
-      return res.status(404).json({ message: 'League not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'League not found');
     }
 
+    // ✅ AUTHORIZATION CHECK (owner only)
     if (String(league.ownerId) !== userId) {
-      return res.status(403).json({
-        message: 'Only league owner can delete seasons',
-      });
+      return sendErrorResponse(
+        res,
+        HttpStatus.FORBIDDEN,
+        'Only league owner can delete seasons'
+      );
     }
 
     await season.deleteOne();
 
-    return res.status(204).send();
+    // ✅ NO CONTENT RESPONSE (204)
+    return res.status(HttpStatus.NO_CONTENT).send();
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error deleting season:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to delete season'
+    );
   }
 }
 

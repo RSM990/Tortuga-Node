@@ -1,4 +1,4 @@
-// src/controllers/ownership.ts
+// src/controllers/ownership.ts - REFACTORED WITH STANDARDIZED RESPONSES
 import type { Request, Response, NextFunction } from 'express';
 import { validationResult } from 'express-validator';
 import MovieOwnershipModel from '../models/MovieOwnership.js';
@@ -7,7 +7,14 @@ import LeagueModel from '../models/League.js';
 import StudioModel from '../models/Studio.js';
 import StudioOwnerModel from '../models/StudioOwner.js';
 import MovieModel from '../models/Movie.js';
-import { paginatedResponse, parsePaginationParams } from '../utils/response.js';
+import {
+  HttpStatus,
+  parsePaginationParams,
+  sendPaginatedResponse,
+  sendSuccessResponse,
+  sendErrorResponse,
+  successResponse,
+} from '../utils/response.js';
 
 const getReqUserId = (req: Request): string | undefined =>
   (req as any).userId as string | undefined;
@@ -16,23 +23,27 @@ const getReqUserId = (req: Request): string | undefined =>
  * Create movie ownership (acquire movie for studio)
  * POST /api/ownership
  */
-async function createOwnership(
-  req: Request,
-  res: Response,
-  next: NextFunction
-) {
+async function createOwnership(req: Request, res: Response) {
   try {
+    // ✅ VALIDATION ERRORS
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(422).json({
-        message: 'Validation failed',
-        data: errors.array(),
-      });
+      return sendErrorResponse(
+        res,
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'Validation failed',
+        errors.array().map((err: any) => ({
+          field: err.path || err.param,
+          message: err.msg,
+          code: 'VALIDATION_ERROR',
+        }))
+      );
     }
 
+    // ✅ AUTH CHECK
     const userId = getReqUserId(req);
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return sendErrorResponse(res, HttpStatus.UNAUTHORIZED, 'Unauthorized');
     }
 
     const { leagueId, seasonId, studioId, movieId, purchasePrice, acquiredAt } =
@@ -44,8 +55,13 @@ async function createOwnership(
       leagueId,
     }).lean();
 
+    // ✅ NOT FOUND CHECK
     if (!season) {
-      return res.status(404).json({ message: 'Season not found in league' });
+      return sendErrorResponse(
+        res,
+        HttpStatus.NOT_FOUND,
+        'Season not found in league'
+      );
     }
 
     // Verify studio exists and belongs to league
@@ -55,9 +71,14 @@ async function createOwnership(
     }).lean();
 
     if (!studio) {
-      return res.status(404).json({ message: 'Studio not found in league' });
+      return sendErrorResponse(
+        res,
+        HttpStatus.NOT_FOUND,
+        'Studio not found in league'
+      );
     }
 
+    // ✅ AUTHORIZATION CHECK
     // Verify user owns or manages this studio
     const studioMembership = await StudioOwnerModel.findOne({
       studioId,
@@ -65,17 +86,20 @@ async function createOwnership(
     }).lean();
 
     if (!studioMembership) {
-      return res.status(403).json({
-        message: 'You do not have permission to manage this studio',
-      });
+      return sendErrorResponse(
+        res,
+        HttpStatus.FORBIDDEN,
+        'You do not have permission to manage this studio'
+      );
     }
 
     // Verify movie exists
     const movie = await MovieModel.findById(movieId).lean();
     if (!movie) {
-      return res.status(404).json({ message: 'Movie not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'Movie not found');
     }
 
+    // ✅ CONFLICT CHECK
     // Check if movie is already owned in this season
     const existing = await MovieOwnershipModel.findOne({
       seasonId,
@@ -83,9 +107,11 @@ async function createOwnership(
     }).lean();
 
     if (existing) {
-      return res.status(409).json({
-        message: 'Movie is already owned by a studio in this season',
-      });
+      return sendErrorResponse(
+        res,
+        HttpStatus.CONFLICT,
+        'Movie is already owned by a studio in this season'
+      );
     }
 
     const ownership = await MovieOwnershipModel.create({
@@ -98,10 +124,19 @@ async function createOwnership(
       refundApplied: false,
     });
 
-    return res.status(201).json(ownership);
+    // ✅ CREATED RESPONSE (201)
+    return res
+      .status(HttpStatus.CREATED)
+      .json(
+        successResponse(ownership, undefined, 'Movie acquired successfully')
+      );
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error creating ownership:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to create ownership'
+    );
   }
 }
 
@@ -109,15 +144,12 @@ async function createOwnership(
  * Get ownerships by season
  * GET /api/ownership/by-season/:seasonId
  */
-async function getOwnershipsBySeason(
-  req: Request,
-  res: Response,
-  next: NextFunction
-) {
+async function getOwnershipsBySeason(req: Request, res: Response) {
   try {
+    // ✅ AUTH CHECK
     const userId = getReqUserId(req);
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return sendErrorResponse(res, HttpStatus.UNAUTHORIZED, 'Unauthorized');
     }
 
     const { seasonId } = req.params;
@@ -125,8 +157,10 @@ async function getOwnershipsBySeason(
 
     // Verify season exists
     const season = await SeasonModel.findById(seasonId).lean();
+
+    // ✅ NOT FOUND CHECK
     if (!season) {
-      return res.status(404).json({ message: 'Season not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'Season not found');
     }
 
     // Verify user has access to this league
@@ -135,9 +169,10 @@ async function getOwnershipsBySeason(
       .lean();
 
     if (!league) {
-      return res.status(404).json({ message: 'League not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'League not found');
     }
 
+    // ✅ AUTHORIZATION CHECK
     const isOwner = String(league.ownerId) === userId;
     const isComm = league.commissionerIds?.some(
       (id: any) => String(id) === userId
@@ -145,7 +180,7 @@ async function getOwnershipsBySeason(
 
     // TODO: Add StudioOwner membership check
     if (!isOwner && !isComm) {
-      return res.status(403).json({ message: 'Access denied' });
+      return sendErrorResponse(res, HttpStatus.FORBIDDEN, 'Access denied');
     }
 
     const query = { seasonId };
@@ -160,10 +195,15 @@ async function getOwnershipsBySeason(
       MovieOwnershipModel.countDocuments(query),
     ]);
 
-    return res.json(paginatedResponse(items, page, limit, total));
+    // ✅ PAGINATED RESPONSE
+    return sendPaginatedResponse(res, items, { page, limit, total });
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error fetching ownerships by season:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to fetch ownerships'
+    );
   }
 }
 
@@ -171,15 +211,12 @@ async function getOwnershipsBySeason(
  * Get ownerships by studio
  * GET /api/ownership/by-studio/:studioId
  */
-async function getOwnershipsByStudio(
-  req: Request,
-  res: Response,
-  next: NextFunction
-) {
+async function getOwnershipsByStudio(req: Request, res: Response) {
   try {
+    // ✅ AUTH CHECK
     const userId = getReqUserId(req);
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return sendErrorResponse(res, HttpStatus.UNAUTHORIZED, 'Unauthorized');
     }
 
     const { studioId } = req.params;
@@ -187,8 +224,10 @@ async function getOwnershipsByStudio(
 
     // Verify studio exists
     const studio = await StudioModel.findById(studioId).lean();
+
+    // ✅ NOT FOUND CHECK
     if (!studio) {
-      return res.status(404).json({ message: 'Studio not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'Studio not found');
     }
 
     // Verify user has access to this league
@@ -197,9 +236,10 @@ async function getOwnershipsByStudio(
       .lean();
 
     if (!league) {
-      return res.status(404).json({ message: 'League not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'League not found');
     }
 
+    // ✅ AUTHORIZATION CHECK
     const isOwner = String(league.ownerId) === userId;
     const isComm = league.commissionerIds?.some(
       (id: any) => String(id) === userId
@@ -209,7 +249,7 @@ async function getOwnershipsByStudio(
     const isMember = await StudioOwnerModel.exists({ studioId, userId });
 
     if (!isOwner && !isComm && !isMember) {
-      return res.status(403).json({ message: 'Access denied' });
+      return sendErrorResponse(res, HttpStatus.FORBIDDEN, 'Access denied');
     }
 
     const query = { studioId };
@@ -224,10 +264,15 @@ async function getOwnershipsByStudio(
       MovieOwnershipModel.countDocuments(query),
     ]);
 
-    return res.json(paginatedResponse(items, page, limit, total));
+    // ✅ PAGINATED RESPONSE
+    return sendPaginatedResponse(res, items, { page, limit, total });
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error fetching ownerships by studio:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to fetch ownerships'
+    );
   }
 }
 
@@ -235,26 +280,35 @@ async function getOwnershipsByStudio(
  * Retire movie ownership (sell/drop movie)
  * PATCH /api/ownership/:id/retire
  */
-async function retireOwnership(
-  req: Request,
-  res: Response,
-  next: NextFunction
-) {
+async function retireOwnership(req: Request, res: Response) {
   try {
+    // ✅ AUTH CHECK
     const userId = getReqUserId(req);
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return sendErrorResponse(res, HttpStatus.UNAUTHORIZED, 'Unauthorized');
     }
 
     const ownership = await MovieOwnershipModel.findById(req.params.id);
+
+    // ✅ NOT FOUND CHECK
     if (!ownership) {
-      return res.status(404).json({ message: 'Ownership not found' });
+      return sendErrorResponse(
+        res,
+        HttpStatus.NOT_FOUND,
+        'Ownership not found'
+      );
     }
 
+    // ✅ CONFLICT CHECK
     if (ownership.retiredAt) {
-      return res.status(400).json({ message: 'Ownership already retired' });
+      return sendErrorResponse(
+        res,
+        HttpStatus.CONFLICT,
+        'Ownership already retired'
+      );
     }
 
+    // ✅ AUTHORIZATION CHECK
     // Verify user owns or manages this studio
     const studioMembership = await StudioOwnerModel.findOne({
       studioId: ownership.studioId,
@@ -262,18 +316,29 @@ async function retireOwnership(
     }).lean();
 
     if (!studioMembership) {
-      return res.status(403).json({
-        message: 'You do not have permission to manage this studio',
-      });
+      return sendErrorResponse(
+        res,
+        HttpStatus.FORBIDDEN,
+        'You do not have permission to manage this studio'
+      );
     }
 
     ownership.retiredAt = new Date();
     await ownership.save();
 
-    return res.json(ownership);
+    // ✅ SUCCESS RESPONSE
+    return sendSuccessResponse(
+      res,
+      ownership,
+      'Movie ownership retired successfully'
+    );
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error retiring ownership:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to retire ownership'
+    );
   }
 }
 

@@ -6,7 +6,13 @@ import {
   buildFriendlyMovieFilter,
   mergeConditions,
 } from '../utils/query.js';
-import { paginatedResponse, parsePaginationParams } from '../utils/response.js';
+import {
+  HttpStatus,
+  parsePaginationParams,
+  sendErrorResponse,
+  sendPaginatedResponse,
+  sendSuccessResponse,
+} from '../utils/response.js';
 
 // Convert plain value to case-insensitive exact-match RegExp
 const toCiExact = (val: unknown): RegExp =>
@@ -19,7 +25,6 @@ const toCiExact = (val: unknown): RegExp =>
 
 async function getMovies(req: Request, res: Response, next: NextFunction) {
   try {
-    // Parse and validate pagination params
     const { page, limit, skip } = parsePaginationParams(req.query);
 
     // Build filters
@@ -65,24 +70,33 @@ async function getMovies(req: Request, res: Response, next: NextFunction) {
     ]);
 
     // ✅ STANDARDIZED RESPONSE
-    return res.json(paginatedResponse(items, page, limit, total));
+    return sendPaginatedResponse(res, items, { page, limit, total });
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error fetching movies:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to fetch movies'
+    );
   }
 }
 
 async function getMovie(req: Request, res: Response, next: NextFunction) {
   try {
     const movie = await Movie.findById(req.params.movieId).lean();
+
     if (!movie) {
-      return res.status(404).json({ message: 'Movie not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'Movie not found');
     }
-    // Single resource - just return the object
-    return res.json(movie);
+
+    return sendSuccessResponse(res, movie);
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error fetching movie:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to fetch movie'
+    );
   }
 }
 
@@ -153,10 +167,14 @@ async function getDistinctGenres(
       .sort((a, b) => b.count - a.count);
 
     // Return as simple array (not paginated)
-    return res.json(merged);
+    return sendSuccessResponse(res, merged);
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error fetching genres for movies:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to fetch genres'
+    );
   }
 }
 

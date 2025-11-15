@@ -1,4 +1,4 @@
-// src/controllers/compute.ts
+// src/controllers/compute.ts - REFACTORED WITH STANDARDIZED RESPONSES
 import type { Request, Response, NextFunction } from 'express';
 import { validationResult } from 'express-validator';
 import SeasonModel, { ISeasonDocument } from '../models/Season.js';
@@ -7,6 +7,12 @@ import MovieWeeklyRevenueModel from '../models/MovieWeeklyRevenue.js';
 import MovieOwnershipModel from '../models/MovieOwnership.js';
 import StudioWeeklyRevenueModel from '../models/StudioWeeklyRevenue.js';
 import WeeklyRankingModel from '../models/WeeklyRanking.js';
+import {
+  HttpStatus,
+  sendSuccessResponse,
+  sendErrorResponse,
+  successResponse,
+} from '../utils/response.js';
 
 const getReqUserId = (req: Request): string | undefined =>
   (req as any).userId as string | undefined;
@@ -23,46 +29,60 @@ function computeWeekWindow(start: Date, weekIndex: number) {
  * Compute weekly rankings for a season
  * POST /api/seasons/:id/compute/week/:weekIndex
  */
-async function computeWeek(req: Request, res: Response, next: NextFunction) {
+async function computeWeek(req: Request, res: Response) {
   try {
+    // ✅ VALIDATION ERRORS
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(422).json({
-        message: 'Validation failed',
-        data: errors.array(),
-      });
+      return sendErrorResponse(
+        res,
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'Validation failed',
+        errors.array().map((err: any) => ({
+          field: err.path || err.param,
+          message: err.msg,
+          code: 'VALIDATION_ERROR',
+        }))
+      );
     }
 
+    // ✅ AUTH CHECK
     const userId = getReqUserId(req);
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return sendErrorResponse(res, HttpStatus.UNAUTHORIZED, 'Unauthorized');
     }
 
     const seasonId = req.params.id;
     const weekIndex = Number(req.params.weekIndex);
 
     const season = await SeasonModel.findById(seasonId).lean<ISeasonDocument>();
+
+    // ✅ NOT FOUND CHECK
     if (!season) {
-      return res.status(404).json({ message: 'Season not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'Season not found');
     }
 
     // Verify user is league owner or commissioner
     const league = await LeagueModel.findById(
       season.leagueId
     ).lean<ILeagueDocument>();
+
     if (!league) {
-      return res.status(404).json({ message: 'League not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'League not found');
     }
 
+    // ✅ AUTHORIZATION CHECK
     const isOwner = String(league.ownerId) === userId;
     const isComm = league.commissionerIds?.some(
       (id: any) => String(id) === userId
     );
 
     if (!isOwner && !isComm) {
-      return res.status(403).json({
-        message: 'Only league owners or commissioners can compute weeks',
-      });
+      return sendErrorResponse(
+        res,
+        HttpStatus.FORBIDDEN,
+        'Only league owners or commissioners can compute weeks'
+      );
     }
 
     const { weekStart, weekEnd } = computeWeekWindow(
@@ -153,15 +173,25 @@ async function computeWeek(req: Request, res: Response, next: NextFunction) {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    return res.status(201).json({
-      ok: true,
-      window: { weekIndex, weekStart, weekEnd },
-      studiosUpdated: upserts.length,
-      ranking: ranking.rows,
-    });
+    // ✅ CREATED RESPONSE (201)
+    return res.status(HttpStatus.CREATED).json(
+      successResponse(
+        {
+          window: { weekIndex, weekStart, weekEnd },
+          studiosUpdated: upserts.length,
+          ranking: ranking.rows,
+        },
+        undefined,
+        'Week computed successfully'
+      )
+    );
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error computing week:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to compute week'
+    );
   }
 }
 
@@ -169,30 +199,32 @@ async function computeWeek(req: Request, res: Response, next: NextFunction) {
  * Get studio totals for a given week
  * GET /api/seasons/:id/studios/week/:weekIndex
  */
-async function getStudioWeeklyTotals(
-  req: Request,
-  res: Response,
-  next: NextFunction
-) {
+async function getStudioWeeklyTotals(req: Request, res: Response) {
   try {
+    // ✅ AUTH CHECK
     const userId = getReqUserId(req);
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return sendErrorResponse(res, HttpStatus.UNAUTHORIZED, 'Unauthorized');
     }
 
     const seasonId = req.params.id;
     const weekIndex = Number(req.params.weekIndex);
 
+    // ✅ VALIDATION CHECK
     if (!Number.isInteger(weekIndex) || weekIndex < 0) {
-      return res.status(400).json({
-        message: 'Week index must be a non-negative integer',
-      });
+      return sendErrorResponse(
+        res,
+        HttpStatus.BAD_REQUEST,
+        'Week index must be a non-negative integer'
+      );
     }
 
     // Verify season exists and user has access
     const season = await SeasonModel.findById(seasonId).lean();
+
+    // ✅ NOT FOUND CHECK
     if (!season) {
-      return res.status(404).json({ message: 'Season not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'Season not found');
     }
 
     const league = await LeagueModel.findById(season.leagueId)
@@ -200,9 +232,10 @@ async function getStudioWeeklyTotals(
       .lean();
 
     if (!league) {
-      return res.status(404).json({ message: 'League not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'League not found');
     }
 
+    // ✅ AUTHORIZATION CHECK
     const isOwner = String(league.ownerId) === userId;
     const isComm = league.commissionerIds?.some(
       (id: any) => String(id) === userId
@@ -210,7 +243,7 @@ async function getStudioWeeklyTotals(
 
     // TODO: Add StudioOwner membership check
     if (!isOwner && !isComm) {
-      return res.status(403).json({ message: 'Access denied' });
+      return sendErrorResponse(res, HttpStatus.FORBIDDEN, 'Access denied');
     }
 
     const docs = await StudioWeeklyRevenueModel.find({
@@ -218,10 +251,15 @@ async function getStudioWeeklyTotals(
       weekIndex,
     }).lean();
 
-    return res.json(docs);
+    // ✅ ARRAY RESPONSE (not paginated)
+    return sendSuccessResponse(res, docs);
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error fetching studio weekly totals:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to fetch studio weekly totals'
+    );
   }
 }
 
@@ -229,30 +267,32 @@ async function getStudioWeeklyTotals(
  * Get ranking table for a given week
  * GET /api/seasons/:id/rankings/week/:weekIndex
  */
-async function getWeeklyRanking(
-  req: Request,
-  res: Response,
-  next: NextFunction
-) {
+async function getWeeklyRanking(req: Request, res: Response) {
   try {
+    // ✅ AUTH CHECK
     const userId = getReqUserId(req);
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return sendErrorResponse(res, HttpStatus.UNAUTHORIZED, 'Unauthorized');
     }
 
     const seasonId = req.params.id;
     const weekIndex = Number(req.params.weekIndex);
 
+    // ✅ VALIDATION CHECK
     if (!Number.isInteger(weekIndex) || weekIndex < 0) {
-      return res.status(400).json({
-        message: 'Week index must be a non-negative integer',
-      });
+      return sendErrorResponse(
+        res,
+        HttpStatus.BAD_REQUEST,
+        'Week index must be a non-negative integer'
+      );
     }
 
     // Verify season exists and user has access
     const season = await SeasonModel.findById(seasonId).lean();
+
+    // ✅ NOT FOUND CHECK
     if (!season) {
-      return res.status(404).json({ message: 'Season not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'Season not found');
     }
 
     const league = await LeagueModel.findById(season.leagueId)
@@ -260,9 +300,10 @@ async function getWeeklyRanking(
       .lean();
 
     if (!league) {
-      return res.status(404).json({ message: 'League not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'League not found');
     }
 
+    // ✅ AUTHORIZATION CHECK
     const isOwner = String(league.ownerId) === userId;
     const isComm = league.commissionerIds?.some(
       (id: any) => String(id) === userId
@@ -270,21 +311,32 @@ async function getWeeklyRanking(
 
     // TODO: Add StudioOwner membership check
     if (!isOwner && !isComm) {
-      return res.status(403).json({ message: 'Access denied' });
+      return sendErrorResponse(res, HttpStatus.FORBIDDEN, 'Access denied');
     }
 
     const doc = await WeeklyRankingModel.findOne({
       seasonId,
       weekIndex,
     }).lean();
+
+    // ✅ NOT FOUND CHECK
     if (!doc) {
-      return res.status(404).json({ message: 'No ranking for that week' });
+      return sendErrorResponse(
+        res,
+        HttpStatus.NOT_FOUND,
+        'No ranking for that week'
+      );
     }
 
-    return res.json(doc);
+    // ✅ SUCCESS RESPONSE
+    return sendSuccessResponse(res, doc);
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error fetching weekly ranking:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to fetch weekly ranking'
+    );
   }
 }
 

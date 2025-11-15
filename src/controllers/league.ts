@@ -1,4 +1,4 @@
-// src/controllers/league.ts
+// src/controllers/league.ts - REFACTORED WITH STANDARDIZED RESPONSES
 import type { Request, Response, NextFunction } from 'express';
 import { validationResult } from 'express-validator';
 import { Types } from 'mongoose';
@@ -11,7 +11,14 @@ import {
   assignLeagueSlugAtomic,
 } from '../services/slugService.js';
 import { toSlug } from '../utils/slug.js';
-import { paginatedResponse, parsePaginationParams } from '../utils/response.js';
+import {
+  HttpStatus,
+  parsePaginationParams,
+  sendPaginatedResponse,
+  sendSuccessResponse,
+  sendErrorResponse,
+  successResponse, // For custom status codes like 201
+} from '../utils/response.js';
 
 const getReqUserId = (req: Request): string | undefined =>
   (req as any).userId as string | undefined;
@@ -61,18 +68,21 @@ function membershipOrClause(userId: string, memberLeagueIds: Types.ObjectId[]) {
  * List leagues user belongs to
  * GET /api/leagues
  */
-async function getLeagues(req: Request, res: Response, next: NextFunction) {
+async function getLeagues(req: Request, res: Response) {
   try {
+    // ✅ AUTH CHECK
     const userId = getReqUserId(req);
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return sendErrorResponse(res, HttpStatus.UNAUTHORIZED, 'Unauthorized');
     }
 
+    // ✅ PAGINATION
     const { page, limit, skip } = parsePaginationParams(req.query);
     const q = String(req.query.q ?? '').trim();
     const visibility = String(req.query.visibility ?? '').trim();
     const sort = parseSort(String(req.query.sort ?? ''));
 
+    // Build filter
     const memberIds = await memberLeagueIdsFor(userId);
     const filter: any = membershipOrClause(userId, memberIds);
 
@@ -89,15 +99,21 @@ async function getLeagues(req: Request, res: Response, next: NextFunction) {
       filter.$and = (filter.$and || []).concat([{ visibility }]);
     }
 
+    // Execute query
     const [data, total] = await Promise.all([
       LeagueModel.find(filter).sort(sort).skip(skip).limit(limit).lean(),
       LeagueModel.countDocuments(filter),
     ]);
 
-    return res.json(paginatedResponse(data, page, limit, total));
+    // ✅ STANDARDIZED RESPONSE
+    return sendPaginatedResponse(res, data, { page, limit, total });
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error fetching leagues:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to fetch leagues'
+    );
   }
 }
 
@@ -105,19 +121,27 @@ async function getLeagues(req: Request, res: Response, next: NextFunction) {
  * Create a new league
  * POST /api/leagues
  */
-async function createLeague(req: Request, res: Response, next: NextFunction) {
+async function createLeague(req: Request, res: Response) {
   try {
+    // ✅ VALIDATION ERRORS
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(422).json({
-        message: 'Validation failed',
-        data: errors.array(),
-      });
+      return sendErrorResponse(
+        res,
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'Validation failed',
+        errors.array().map((err: any) => ({
+          field: err.path || err.param,
+          message: err.msg,
+          code: 'VALIDATION_ERROR',
+        }))
+      );
     }
 
+    // ✅ AUTH CHECK
     const userId = getReqUserId(req);
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return sendErrorResponse(res, HttpStatus.UNAUTHORIZED, 'Unauthorized');
     }
 
     const body: any = { ...req.body };
@@ -130,15 +154,21 @@ async function createLeague(req: Request, res: Response, next: NextFunction) {
         body.ownerId = userId;
         body.commissionerIds = body.commissionerIds ?? [];
         const league = await LeagueModel.create(body);
-        // Note: User-League relationship tracked via StudioOwner, not User.leagues
         return league;
       }
     );
 
-    return res.status(201).json(created);
+    // ✅ CREATED RESPONSE (201)
+    return res
+      .status(HttpStatus.CREATED)
+      .json(successResponse(created, undefined, 'League created successfully'));
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error creating league:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to create league'
+    );
   }
 }
 
@@ -146,11 +176,12 @@ async function createLeague(req: Request, res: Response, next: NextFunction) {
  * Get league by ID or slug
  * GET /api/leagues/:idOrSlug
  */
-async function getLeague(req: Request, res: Response, next: NextFunction) {
+async function getLeague(req: Request, res: Response) {
   try {
+    // ✅ AUTH CHECK
     const userId = getReqUserId(req);
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return sendErrorResponse(res, HttpStatus.UNAUTHORIZED, 'Unauthorized');
     }
 
     const { idOrSlug } = req.params;
@@ -164,14 +195,20 @@ async function getLeague(req: Request, res: Response, next: NextFunction) {
       ...membershipOrClause(userId, memberIds),
     }).lean();
 
+    // ✅ NOT FOUND CHECK
     if (!league) {
-      return res.status(404).json({ message: 'League not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'League not found');
     }
 
-    return res.json(league);
+    // ✅ STANDARDIZED RESPONSE
+    return sendSuccessResponse(res, league);
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error fetching league:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to fetch league'
+    );
   }
 }
 
@@ -179,35 +216,48 @@ async function getLeague(req: Request, res: Response, next: NextFunction) {
  * Update league
  * PATCH /api/leagues/:id
  */
-async function updateLeague(req: Request, res: Response, next: NextFunction) {
+async function updateLeague(req: Request, res: Response) {
   try {
+    // ✅ VALIDATION ERRORS
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(422).json({
-        message: 'Validation failed',
-        data: errors.array(),
-      });
+      return sendErrorResponse(
+        res,
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'Validation failed',
+        errors.array().map((err: any) => ({
+          field: err.path || err.param,
+          message: err.msg,
+          code: 'VALIDATION_ERROR',
+        }))
+      );
     }
 
+    // ✅ AUTH CHECK
     const userId = getReqUserId(req);
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return sendErrorResponse(res, HttpStatus.UNAUTHORIZED, 'Unauthorized');
     }
 
     const league = await LeagueModel.findById(req.params.id);
+
+    // ✅ NOT FOUND CHECK
     if (!league) {
-      return res.status(404).json({ message: 'League not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'League not found');
     }
 
+    // ✅ AUTHORIZATION CHECK
     const isOwner = String(league.ownerId) === userId;
     const isComm = league.commissionerIds?.some(
       (id: any) => String(id) === userId
     );
 
     if (!isOwner && !isComm) {
-      return res.status(403).json({
-        message: 'Commissioner or owner role required',
-      });
+      return sendErrorResponse(
+        res,
+        HttpStatus.FORBIDDEN,
+        'Commissioner or owner role required'
+      );
     }
 
     const { slug, ownerId, commissionerIds, ...rest } = req.body ?? {};
@@ -221,10 +271,14 @@ async function updateLeague(req: Request, res: Response, next: NextFunction) {
           slug: update.slug,
           _id: { $ne: req.params.id },
         }).lean();
+
+        // ✅ CONFLICT CHECK
         if (exists) {
-          return res.status(409).json({
-            message: 'League slug already exists. Choose another.',
-          });
+          return sendErrorResponse(
+            res,
+            HttpStatus.CONFLICT,
+            'League slug already exists. Choose another.'
+          );
         }
       }
     }
@@ -241,10 +295,15 @@ async function updateLeague(req: Request, res: Response, next: NextFunction) {
       runValidators: true,
     });
 
-    return res.json(saved);
+    // ✅ STANDARDIZED RESPONSE
+    return sendSuccessResponse(res, saved, 'League updated successfully');
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error updating league:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to update league'
+    );
   }
 }
 
@@ -252,31 +311,42 @@ async function updateLeague(req: Request, res: Response, next: NextFunction) {
  * Delete league
  * DELETE /api/leagues/:id
  */
-async function deleteLeague(req: Request, res: Response, next: NextFunction) {
+async function deleteLeague(req: Request, res: Response) {
   try {
+    // ✅ AUTH CHECK
     const userId = getReqUserId(req);
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return sendErrorResponse(res, HttpStatus.UNAUTHORIZED, 'Unauthorized');
     }
 
     const league = await LeagueModel.findById(req.params.id);
+
+    // ✅ NOT FOUND CHECK
     if (!league) {
-      return res.status(404).json({ message: 'League not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'League not found');
     }
 
-    // Only owner can delete
+    // ✅ AUTHORIZATION CHECK (only owner can delete)
     if (String(league.ownerId) !== userId) {
-      return res.status(403).json({
-        message: 'Only league owner can delete the league',
-      });
+      return sendErrorResponse(
+        res,
+        HttpStatus.FORBIDDEN,
+        'Only league owner can delete the league'
+      );
     }
 
     await league.deleteOne();
 
-    return res.status(204).send();
+    // ✅ NO CONTENT RESPONSE (204)
+    // Note: 204 responses have no body
+    return res.status(HttpStatus.NO_CONTENT).send();
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error deleting league:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to delete league'
+    );
   }
 }
 
@@ -284,15 +354,12 @@ async function deleteLeague(req: Request, res: Response, next: NextFunction) {
  * Get league members
  * GET /api/leagues/:idOrSlug/members
  */
-async function getLeagueMembers(
-  req: Request,
-  res: Response,
-  next: NextFunction
-) {
+async function getLeagueMembers(req: Request, res: Response) {
   try {
+    // ✅ AUTH CHECK
     const userId = getReqUserId(req);
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return sendErrorResponse(res, HttpStatus.UNAUTHORIZED, 'Unauthorized');
     }
 
     const { idOrSlug } = req.params;
@@ -306,8 +373,9 @@ async function getLeagueMembers(
       ...membershipOrClause(userId, memberIds),
     }).lean();
 
+    // ✅ NOT FOUND CHECK
     if (!league) {
-      return res.status(404).json({ message: 'League not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'League not found');
     }
 
     // Get all studio owners in this league
@@ -343,10 +411,15 @@ async function getLeagueMembers(
       };
     });
 
-    return res.json(members);
+    // ✅ ARRAY RESPONSE (not paginated)
+    return sendSuccessResponse(res, members);
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error fetching league members:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to fetch league members'
+    );
   }
 }
 
@@ -354,15 +427,12 @@ async function getLeagueMembers(
  * Get league standings
  * GET /api/leagues/:idOrSlug/standings
  */
-async function getLeagueStandings(
-  req: Request,
-  res: Response,
-  next: NextFunction
-) {
+async function getLeagueStandings(req: Request, res: Response) {
   try {
+    // ✅ AUTH CHECK
     const userId = getReqUserId(req);
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return sendErrorResponse(res, HttpStatus.UNAUTHORIZED, 'Unauthorized');
     }
 
     const { idOrSlug } = req.params;
@@ -376,8 +446,9 @@ async function getLeagueStandings(
       ...membershipOrClause(userId, memberIds),
     }).lean();
 
+    // ✅ NOT FOUND CHECK
     if (!league) {
-      return res.status(404).json({ message: 'League not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'League not found');
     }
 
     // TODO: Replace with real aggregation of points per studio
@@ -393,10 +464,15 @@ async function getLeagueStandings(
     let rank = 1;
     const standings = rows.map((r) => ({ ...r, rank: rank++ }));
 
-    return res.json(standings);
+    // ✅ ARRAY RESPONSE (not paginated)
+    return sendSuccessResponse(res, standings);
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error fetching league standings:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to fetch league standings'
+    );
   }
 }
 
@@ -404,18 +480,20 @@ async function getLeagueStandings(
  * Check slug availability
  * GET /api/leagues/slug/check?name=<nameOrSlug>
  */
-async function checkSlugAvailability(
-  req: Request,
-  res: Response,
-  next: NextFunction
-) {
+async function checkSlugAvailability(req: Request, res: Response) {
   try {
     const raw = String(req.query.name || req.query.slug || '');
     const result = await nextAvailableLeagueSlugAgg(raw);
-    return res.json(result);
+
+    // ✅ STANDARDIZED RESPONSE
+    return sendSuccessResponse(res, result);
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error checking slug availability:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to check slug availability'
+    );
   }
 }
 

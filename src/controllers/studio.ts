@@ -1,31 +1,49 @@
-// backend/src/controllers/studio.ts
+// src/controllers/studio.ts - REFACTORED WITH STANDARDIZED RESPONSES
 import type { Request, Response, NextFunction } from 'express';
 import Studio from '../models/Studio.js';
-import { paginatedResponse, parsePaginationParams } from '../utils/response.js';
+import {
+  HttpStatus,
+  parsePaginationParams,
+  sendPaginatedResponse,
+  sendSuccessResponse,
+  sendErrorResponse,
+  successResponse,
+} from '../utils/response.js';
 
 /**
  * Create studio in league
  * POST /leagues/:leagueId/studios
  */
-async function createStudio(req: Request, res: Response, next: NextFunction) {
+async function createStudio(req: Request, res: Response) {
   try {
     const { leagueId } = req.params;
     const { name } = req.body;
 
+    // ✅ VALIDATION CHECK
     if (!name) {
-      return res.status(400).json({ message: 'Studio name is required' });
+      return sendErrorResponse(
+        res,
+        HttpStatus.BAD_REQUEST,
+        'Studio name is required'
+      );
     }
 
     const studio = await Studio.create({
       leagueId,
       name,
-      // Add any other fields from req.body as needed
     });
 
-    return res.status(201).json(studio);
+    // ✅ CREATED RESPONSE (201)
+    return res
+      .status(HttpStatus.CREATED)
+      .json(successResponse(studio, undefined, 'Studio created successfully'));
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error creating studio:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to create studio'
+    );
   }
 }
 
@@ -33,7 +51,7 @@ async function createStudio(req: Request, res: Response, next: NextFunction) {
  * List studios in league (paginated)
  * GET /leagues/:leagueId/studios
  */
-async function getStudios(req: Request, res: Response, next: NextFunction) {
+async function getStudios(req: Request, res: Response) {
   try {
     const { leagueId } = req.params;
     const { page, limit, skip } = parsePaginationParams(req.query);
@@ -59,11 +77,15 @@ async function getStudios(req: Request, res: Response, next: NextFunction) {
       Studio.countDocuments(query),
     ]);
 
-    // ✅ STANDARDIZED RESPONSE
-    return res.json(paginatedResponse(items, page, limit, total));
+    // ✅ PAGINATED RESPONSE
+    return sendPaginatedResponse(res, items, { page, limit, total });
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error fetching studios:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to fetch studios'
+    );
   }
 }
 
@@ -71,7 +93,7 @@ async function getStudios(req: Request, res: Response, next: NextFunction) {
  * Get single studio
  * GET /leagues/:leagueId/studios/:studioId
  */
-async function getStudio(req: Request, res: Response, next: NextFunction) {
+async function getStudio(req: Request, res: Response) {
   try {
     const { leagueId, studioId } = req.params;
 
@@ -80,14 +102,20 @@ async function getStudio(req: Request, res: Response, next: NextFunction) {
       leagueId, // ✅ Verify studio belongs to this league
     }).lean();
 
+    // ✅ NOT FOUND CHECK
     if (!studio) {
-      return res.status(404).json({ message: 'Studio not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'Studio not found');
     }
 
-    return res.json(studio);
+    // ✅ SUCCESS RESPONSE
+    return sendSuccessResponse(res, studio);
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error fetching studio:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to fetch studio'
+    );
   }
 }
 
@@ -95,7 +123,7 @@ async function getStudio(req: Request, res: Response, next: NextFunction) {
  * Update studio
  * PATCH /leagues/:leagueId/studios/:studioId
  */
-async function updateStudio(req: Request, res: Response, next: NextFunction) {
+async function updateStudio(req: Request, res: Response) {
   try {
     const { leagueId, studioId } = req.params;
     const updates = req.body;
@@ -113,14 +141,20 @@ async function updateStudio(req: Request, res: Response, next: NextFunction) {
       { new: true, runValidators: true }
     ).lean();
 
+    // ✅ NOT FOUND CHECK
     if (!studio) {
-      return res.status(404).json({ message: 'Studio not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'Studio not found');
     }
 
-    return res.json(studio);
+    // ✅ SUCCESS RESPONSE
+    return sendSuccessResponse(res, studio, 'Studio updated successfully');
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error updating studio:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to update studio'
+    );
   }
 }
 
@@ -128,7 +162,7 @@ async function updateStudio(req: Request, res: Response, next: NextFunction) {
  * Delete studio
  * DELETE /leagues/:leagueId/studios/:studioId
  */
-async function deleteStudio(req: Request, res: Response, next: NextFunction) {
+async function deleteStudio(req: Request, res: Response) {
   try {
     const { leagueId, studioId } = req.params;
 
@@ -137,14 +171,20 @@ async function deleteStudio(req: Request, res: Response, next: NextFunction) {
       leagueId, // ✅ Verify studio belongs to this league
     });
 
+    // ✅ NOT FOUND CHECK
     if (result.deletedCount === 0) {
-      return res.status(404).json({ message: 'Studio not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'Studio not found');
     }
 
-    return res.status(204).send();
+    // ✅ NO CONTENT RESPONSE (204)
+    return res.status(HttpStatus.NO_CONTENT).send();
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error deleting studio:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to delete studio'
+    );
   }
 }
 

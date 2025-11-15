@@ -1,7 +1,12 @@
-// src/controllers/dev.ts
+// src/controllers/dev.ts - REFACTORED WITH STANDARDIZED RESPONSES
 import type { Request, Response, NextFunction } from 'express';
 import { validationResult } from 'express-validator';
 import MovieWeeklyRevenueModel from '../models/MovieWeeklyRevenue.js';
+import {
+  HttpStatus,
+  sendErrorResponse,
+  successResponse,
+} from '../utils/response.js';
 
 const isDevelopment = process.env.NODE_ENV === 'development';
 
@@ -9,19 +14,27 @@ const isDevelopment = process.env.NODE_ENV === 'development';
  * Upsert weekly revenue for a movie (DEV only)
  * POST /api/dev/revenue/upsert
  */
-async function upsertRevenue(req: Request, res: Response, next: NextFunction) {
+async function upsertRevenue(req: Request, res: Response) {
   try {
+    // ✅ ENVIRONMENT CHECK
     // Only allow in development
     if (!isDevelopment) {
-      return res.status(404).json({ message: 'Not found' });
+      return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'Not found');
     }
 
+    // ✅ VALIDATION ERRORS
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(422).json({
-        message: 'Validation failed',
-        data: errors.array(),
-      });
+      return sendErrorResponse(
+        res,
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'Validation failed',
+        errors.array().map((err: any) => ({
+          field: err.path || err.param,
+          message: err.msg,
+          code: 'VALIDATION_ERROR',
+        }))
+      );
     }
 
     const {
@@ -47,10 +60,23 @@ async function upsertRevenue(req: Request, res: Response, next: NextFunction) {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    return res.status(201).json({ ok: true, revenue: doc });
+    // ✅ CREATED RESPONSE (201)
+    return res
+      .status(HttpStatus.CREATED)
+      .json(
+        successResponse(
+          { revenue: doc },
+          undefined,
+          'Revenue upserted successfully'
+        )
+      );
   } catch (err) {
-    (err as any).statusCode ||= 500;
-    next(err);
+    console.error('Error upserting revenue:', err);
+    return sendErrorResponse(
+      res,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to upsert revenue'
+    );
   }
 }
 
