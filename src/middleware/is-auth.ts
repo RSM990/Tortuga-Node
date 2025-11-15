@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import jwt, { JwtPayload } from 'jsonwebtoken';
+import logger from '../config/logger.js';
 
 // Single source of truth for the secret
 const SESSION_SECRET = process.env.SESSION_SECRET ?? 'somesupersecretsecret';
@@ -34,7 +35,7 @@ const isAuth: RequestHandler = (
     return next();
   } catch (err: any) {
     // Common jwt errors: TokenExpiredError, JsonWebTokenError, NotBeforeError
-    console.error('JWT Error:', err?.message || err);
+    logger.error('JWT Error', { error: err?.message || err });
     return res.status(401).json({ message: 'Invalid or expired token.' });
   }
 };

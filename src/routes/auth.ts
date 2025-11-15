@@ -5,6 +5,7 @@ import { body } from 'express-validator';
 import User from '../models/User.js'; // make sure filename/casing matches
 import authController from '../controllers/auth.js'; // default export with handlers
 import isAuth from '../middleware/is-auth.js'; // default export middleware
+import logger from '../config/logger.js';
 
 const router = Router();
 
@@ -78,7 +79,7 @@ router.get('/check-email', async (req, res) => {
     return res.json({ available: !exists });
   } catch (err) {
     // Fail-open is OK for UX; log for ops
-    console.error('check-email error', err);
+    logger.error('check-email error', { error: err });
     return res.status(200).json({ available: true });
   }
 });

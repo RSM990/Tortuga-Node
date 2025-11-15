@@ -1,6 +1,7 @@
 // backend/src/middleware/require-league-member.ts
 import type { Request, Response, NextFunction } from 'express';
 import LeagueModel from '../models/League.js';
+import logger from '../config/logger.js';
 
 /**
  * Middleware to verify user is a member of the specified league
@@ -52,7 +53,7 @@ const requireLeagueMember = async (
 
     next();
   } catch (err) {
-    console.error('requireLeagueMember error:', err);
+    logger.error('requireLeagueMember error', { error: err });
     next(err);
   }
 };

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import logger from './config/logger.js';
 
 const MONGO_URI = process.env.MONGO_URI ?? 'mongodb://127.0.0.1:27017/tortuga';
 const isDev = process.env.NODE_ENV !== 'production';
@@ -18,17 +19,17 @@ let isConnected = false;
 
 export const connectDB = async (): Promise<boolean> => {
   if (isConnected) {
-    console.log('📦 MongoDB already connected');
+    logger.info('MongoDB already connected');
     return true;
   }
 
   try {
     await mongoose.connect(MONGO_URI, options);
     isConnected = true;
-    console.log('✅ MongoDB connected');
+    logger.info('MongoDB connected');
     return true;
   } catch (error) {
-    console.error('❌ MongoDB connection failed:', error);
+    logger.error('MongoDB connection failed', { error });
     // Don't crash the app - let health checks continue to work
     isConnected = false;
     return false;
@@ -37,22 +38,22 @@ export const connectDB = async (): Promise<boolean> => {
 
 // Connection event handlers
 mongoose.connection.on('connected', () => {
-  console.log('📡 Mongoose connected to MongoDB');
+  logger.info('Mongoose connected to MongoDB');
   isConnected = true;
 });
 
 mongoose.connection.on('error', (err) => {
-  console.error('❌ Mongoose connection error:', err);
+  logger.error('Mongoose connection error', { error: err });
   isConnected = false;
 });
 
 mongoose.connection.on('disconnected', () => {
-  console.warn('⚠️ Mongoose disconnected from MongoDB');
+  logger.warn('Mongoose disconnected from MongoDB');
   isConnected = false;
 
   // Attempt to reconnect in production
   if (!isDev) {
-    console.log('🔄 Attempting to reconnect...');
+    logger.info('Attempting to reconnect...');
     setTimeout(() => connectDB(), 5000);
   }
 });
@@ -63,10 +64,10 @@ export const disconnectDB = async (): Promise<void> => {
 
   try {
     await mongoose.connection.close();
-    console.log('👋 MongoDB connection closed');
+    logger.info('MongoDB connection closed');
     isConnected = false;
   } catch (error) {
-    console.error('❌ Error closing MongoDB connection:', error);
+    logger.error('Error closing MongoDB connection', { error });
   }
 };
 

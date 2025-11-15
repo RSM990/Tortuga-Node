@@ -1,4 +1,5 @@
-import mongoose, { Document, Model } from 'mongoose';
+import mongoose, { Model } from 'mongoose';
+import { BaseDocument } from '../types/base.js';
 
 const { Schema } = mongoose;
 
@@ -23,11 +24,8 @@ export interface IMovie {
   };
 }
 
-export interface IMovieDocument extends IMovie, Document {
-  _id: mongoose.Types.ObjectId;
-  createdAt: Date;
-  updatedAt: Date;
-}
+// ✅ Now consistent with all other models - extends BaseDocument instead of manually defining fields
+export interface IMovieDocument extends IMovie, BaseDocument {}
 
 const MovieSchema = new Schema<IMovieDocument>(
   {
