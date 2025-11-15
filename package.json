@@ -15,6 +15,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/luxon": "^3.7.1",
     "@types/node": "^24.9.2",
+    "@types/winston": "^2.4.4",
     "dotenv": "^17.2.3",
     "nodemon": "^3.1.9",
     "tsx": "^4.20.6",
@@ -38,7 +39,8 @@
     "jsonwebtoken": "^9.0.2",
     "luxon": "^3.7.2",
     "mongodb": "^6.15.0",
-    "mongoose": "^8.19.2"
+    "mongoose": "^8.19.2",
+    "winston": "^3.18.3"
   },
   "repository": {
     "type": "git",

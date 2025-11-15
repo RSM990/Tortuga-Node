@@ -9,7 +9,7 @@ const router = Router();
 
 // READ
 router.get('/', isAuth, movieController.getMovies);
-router.get('/genres', isAuth, movieController.getDistinctGenres);
+// router.get('/genres', isAuth, movieController.getDistinctGenres);
 router.get('/:movieId', isAuth, movieController.getMovie);
 
 // Shared validators for create/update

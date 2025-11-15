@@ -1,5 +1,6 @@
 // src/controllers/auth.ts - REFACTORED WITH STANDARDIZED RESPONSES
 import type { Request, Response, NextFunction, CookieOptions } from 'express';
+import logger from '../config/logger.js';
 import { validationResult } from 'express-validator';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -110,7 +111,10 @@ async function signup(req: Request, res: Response) {
         )
       );
   } catch (err) {
-    console.error('Error during signup:', err);
+    logger.error('Error during signup', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -162,7 +166,10 @@ async function login(req: Request, res: Response) {
       'Login successful'
     );
   } catch (err) {
-    console.error('Error during login:', err);
+    logger.error('Error during login', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -189,7 +196,10 @@ async function logout(_req: Request, res: Response) {
     // ✅ SUCCESS RESPONSE
     return sendSuccessResponse(res, null, 'Logout successful');
   } catch (err) {
-    console.error('Error during logout:', err);
+    logger.error('Error during logout', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -220,7 +230,10 @@ async function getUser(req: Request, res: Response) {
     // ✅ SUCCESS RESPONSE
     return sendSuccessResponse(res, makeSafeUser(u));
   } catch (err) {
-    console.error('Error fetching user:', err);
+    logger.error('Error fetching user', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -281,7 +294,10 @@ async function updateMe(req: Request, res: Response) {
       'Profile updated successfully'
     );
   } catch (err) {
-    console.error('Error updating profile:', err);
+    logger.error('Error updating profile', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -346,7 +362,10 @@ async function updatePassword(req: Request, res: Response) {
     // ✅ SUCCESS RESPONSE
     return sendSuccessResponse(res, null, 'Password updated successfully');
   } catch (err) {
-    console.error('Error updating password:', err);
+    logger.error('Error updating password', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,

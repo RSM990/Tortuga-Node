@@ -1,5 +1,6 @@
 // src/controllers/season.ts - REFACTORED WITH STANDARDIZED RESPONSES
 import type { Request, Response, NextFunction } from 'express';
+import logger from '../config/logger.js';
 import { validationResult } from 'express-validator';
 import SeasonModel from '../models/Season.js';
 import LeagueModel from '../models/League.js';
@@ -81,7 +82,10 @@ async function createSeason(req: Request, res: Response) {
       .status(HttpStatus.CREATED)
       .json(successResponse(season, undefined, 'Season created successfully'));
   } catch (err) {
-    console.error('Error creating season:', err);
+    logger.error('Error creating season', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -132,7 +136,10 @@ async function getSeason(req: Request, res: Response) {
     // ✅ SUCCESS RESPONSE
     return sendSuccessResponse(res, season);
   } catch (err) {
-    console.error('Error fetching season:', err);
+    logger.error('Error fetching season', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -188,7 +195,10 @@ async function getSeasons(req: Request, res: Response) {
     // ✅ PAGINATED RESPONSE
     return sendPaginatedResponse(res, items, { page, limit, total });
   } catch (err) {
-    console.error('Error fetching seasons:', err);
+    logger.error('Error fetching seasons', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -251,7 +261,10 @@ async function updateSeason(req: Request, res: Response) {
     // ✅ SUCCESS RESPONSE
     return sendSuccessResponse(res, season, 'Season updated successfully');
   } catch (err) {
-    console.error('Error updating season:', err);
+    logger.error('Error updating season', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -302,7 +315,10 @@ async function deleteSeason(req: Request, res: Response) {
     // ✅ NO CONTENT RESPONSE (204)
     return res.status(HttpStatus.NO_CONTENT).send();
   } catch (err) {
-    console.error('Error deleting season:', err);
+    logger.error('Error deleting season', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,

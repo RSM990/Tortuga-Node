@@ -1,5 +1,6 @@
 // src/controllers/dev.ts - REFACTORED WITH STANDARDIZED RESPONSES
 import type { Request, Response, NextFunction } from 'express';
+import logger from '../config/logger.js';
 import { validationResult } from 'express-validator';
 import MovieWeeklyRevenueModel from '../models/MovieWeeklyRevenue.js';
 import {
@@ -71,7 +72,10 @@ async function upsertRevenue(req: Request, res: Response) {
         )
       );
   } catch (err) {
-    console.error('Error upserting revenue:', err);
+    logger.error('Error upserting revenue', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,

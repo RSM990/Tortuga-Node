@@ -8,6 +8,8 @@ import { apiRateLimit } from './middleware/rate-limit.js';
 import { connectDB, isDBHealthy } from './db.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import requestLogger from './middleware/requestLogger.js';
+import logger from './config/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -37,7 +39,10 @@ app.get('/api/healthz', healthHandler);
 
 // Initialize database connection (non-blocking)
 connectDB().catch((err) => {
-  console.error('❌ Database initialization failed:', err);
+  logger.error('Database initialization failed', {
+    error: err instanceof Error ? err.message : 'Unknown error',
+    stack: err instanceof Error ? err.stack : undefined,
+  });
 });
 
 // CORS Configuration
@@ -106,6 +111,9 @@ app.use((req, res, next) => {
 // Static files
 app.use(express.static(path.join(__dirname, 'public')));
 
+//Winston request logging middleware
+app.use(requestLogger);
+
 // Session store setup
 type StoreType = InstanceType<ReturnType<typeof MongoStore>>;
 let sessionStore: StoreType | null = null;
@@ -124,10 +132,16 @@ let sessionStore: StoreType | null = null;
     }) as StoreType;
 
     sessionStore.on('error', (error: Error) => {
-      console.error('❌ Session store error:', error);
+      logger.error('Session store error', {
+        error: error.message,
+        stack: error.stack,
+      });
     });
   } catch (error) {
-    console.error('❌ Failed to initialize session store:', error);
+    logger.error('Failed to initialize session store', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+    });
   }
 })();
 
@@ -138,7 +152,7 @@ app.use((req, res, next) => {
   }
 
   if (!sessionStore) {
-    console.warn('⚠️ Session store not available, skipping session middleware');
+    logger.warn('Session store not available, skipping session middleware');
     return next();
   }
   const SESSION_SECRET = process.env.SESSION_SECRET;
@@ -211,7 +225,11 @@ app.use(
     res: express.Response,
     _next: express.NextFunction
   ) => {
-    console.error('❌ Error:', err);
+    logger.error('Global error handler caught error', {
+      error: err.message,
+      stack: err.stack,
+      name: err.name,
+    });
 
     // Handle AppError instances
     if (err instanceof AppError) {

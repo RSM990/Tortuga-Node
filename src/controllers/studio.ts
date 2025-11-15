@@ -1,5 +1,6 @@
 // src/controllers/studio.ts - REFACTORED WITH STANDARDIZED RESPONSES
 import type { Request, Response, NextFunction } from 'express';
+import logger from '../config/logger.js';
 import Studio from '../models/Studio.js';
 import {
   HttpStatus,
@@ -38,7 +39,10 @@ async function createStudio(req: Request, res: Response) {
       .status(HttpStatus.CREATED)
       .json(successResponse(studio, undefined, 'Studio created successfully'));
   } catch (err) {
-    console.error('Error creating studio:', err);
+    logger.error('Error creating studio', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -80,7 +84,10 @@ async function getStudios(req: Request, res: Response) {
     // ✅ PAGINATED RESPONSE
     return sendPaginatedResponse(res, items, { page, limit, total });
   } catch (err) {
-    console.error('Error fetching studios:', err);
+    logger.error('Error fetching studios', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -110,7 +117,10 @@ async function getStudio(req: Request, res: Response) {
     // ✅ SUCCESS RESPONSE
     return sendSuccessResponse(res, studio);
   } catch (err) {
-    console.error('Error fetching studio:', err);
+    logger.error('Error fetching studio', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -149,7 +159,10 @@ async function updateStudio(req: Request, res: Response) {
     // ✅ SUCCESS RESPONSE
     return sendSuccessResponse(res, studio, 'Studio updated successfully');
   } catch (err) {
-    console.error('Error updating studio:', err);
+    logger.error('Error updating studio', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -179,7 +192,10 @@ async function deleteStudio(req: Request, res: Response) {
     // ✅ NO CONTENT RESPONSE (204)
     return res.status(HttpStatus.NO_CONTENT).send();
   } catch (err) {
-    console.error('Error deleting studio:', err);
+    logger.error('Error deleting studio', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,

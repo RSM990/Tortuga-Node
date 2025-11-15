@@ -6,6 +6,7 @@ import LeagueModel from '../models/League.js';
 import StudioModel from '../models/Studio.js';
 import StudioOwnerModel from '../models/StudioOwner.js';
 import UserModel from '../models/User.js';
+import logger from '../config/logger.js';
 import {
   nextAvailableLeagueSlugAgg,
   assignLeagueSlugAtomic,
@@ -108,7 +109,11 @@ async function getLeagues(req: Request, res: Response) {
     // ✅ STANDARDIZED RESPONSE
     return sendPaginatedResponse(res, data, { page, limit, total });
   } catch (err) {
-    console.error('Error fetching leagues:', err);
+    logger.error('Failed to fetch leagues', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+      userId: getReqUserId(req),
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -163,7 +168,12 @@ async function createLeague(req: Request, res: Response) {
       .status(HttpStatus.CREATED)
       .json(successResponse(created, undefined, 'League created successfully'));
   } catch (err) {
-    console.error('Error creating league:', err);
+    logger.error('Failed to create league', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+      userId: getReqUserId(req),
+      leagueName: req.body.name,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -203,7 +213,10 @@ async function getLeague(req: Request, res: Response) {
     // ✅ STANDARDIZED RESPONSE
     return sendSuccessResponse(res, league);
   } catch (err) {
-    console.error('Error fetching league:', err);
+    logger.error('Error fetching league', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -298,7 +311,10 @@ async function updateLeague(req: Request, res: Response) {
     // ✅ STANDARDIZED RESPONSE
     return sendSuccessResponse(res, saved, 'League updated successfully');
   } catch (err) {
-    console.error('Error updating league:', err);
+    logger.error('Error updating league', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -341,7 +357,10 @@ async function deleteLeague(req: Request, res: Response) {
     // Note: 204 responses have no body
     return res.status(HttpStatus.NO_CONTENT).send();
   } catch (err) {
-    console.error('Error deleting league:', err);
+    logger.error('Error deleting league', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -414,7 +433,10 @@ async function getLeagueMembers(req: Request, res: Response) {
     // ✅ ARRAY RESPONSE (not paginated)
     return sendSuccessResponse(res, members);
   } catch (err) {
-    console.error('Error fetching league members:', err);
+    logger.error('Error fetching league members', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -467,7 +489,10 @@ async function getLeagueStandings(req: Request, res: Response) {
     // ✅ ARRAY RESPONSE (not paginated)
     return sendSuccessResponse(res, standings);
   } catch (err) {
-    console.error('Error fetching league standings:', err);
+    logger.error('Error fetching league standings', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -488,7 +513,10 @@ async function checkSlugAvailability(req: Request, res: Response) {
     // ✅ STANDARDIZED RESPONSE
     return sendSuccessResponse(res, result);
   } catch (err) {
-    console.error('Error checking slug availability:', err);
+    logger.error('Error checking slug availability', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,

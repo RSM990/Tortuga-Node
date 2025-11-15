@@ -1,5 +1,6 @@
 // src/controllers/compute.ts - REFACTORED WITH STANDARDIZED RESPONSES
 import type { Request, Response, NextFunction } from 'express';
+import logger from '../config/logger.js';
 import { validationResult } from 'express-validator';
 import SeasonModel, { ISeasonDocument } from '../models/Season.js';
 import LeagueModel, { ILeagueDocument } from '../models/League.js';
@@ -186,7 +187,10 @@ async function computeWeek(req: Request, res: Response) {
       )
     );
   } catch (err) {
-    console.error('Error computing week:', err);
+    logger.error('Error computing week', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -254,7 +258,10 @@ async function getStudioWeeklyTotals(req: Request, res: Response) {
     // ✅ ARRAY RESPONSE (not paginated)
     return sendSuccessResponse(res, docs);
   } catch (err) {
-    console.error('Error fetching studio weekly totals:', err);
+    logger.error('Error fetching studio weekly totals', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -331,7 +338,10 @@ async function getWeeklyRanking(req: Request, res: Response) {
     // ✅ SUCCESS RESPONSE
     return sendSuccessResponse(res, doc);
   } catch (err) {
-    console.error('Error fetching weekly ranking:', err);
+    logger.error('Error fetching weekly ranking', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,

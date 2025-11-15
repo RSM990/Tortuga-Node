@@ -43,3 +43,5 @@ lerna-debug.log*
 *.ntvs*
 *.njsproj
 *.sln
+logs/
+*.log

@@ -1,5 +1,6 @@
 // src/controllers/award.ts - REFACTORED WITH STANDARDIZED RESPONSES
 import type { Request, Response, NextFunction } from 'express';
+import logger from '../config/logger.js';
 import { validationResult } from 'express-validator';
 import SeasonModel, { ISeasonDocument } from '../models/Season.js';
 import LeagueModel from '../models/League.js';
@@ -148,7 +149,10 @@ async function applyAwardBonus(req: Request, res: Response) {
         )
       );
   } catch (err) {
-    console.error('Error applying award bonus:', err);
+    logger.error('Error applying award bonus', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -205,7 +209,10 @@ async function getAwardBonuses(req: Request, res: Response) {
     // ✅ ARRAY RESPONSE (not paginated)
     return sendSuccessResponse(res, bonuses);
   } catch (err) {
-    console.error('Error fetching award bonuses:', err);
+    logger.error('Error fetching award bonuses', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -271,7 +278,10 @@ async function deleteAwardBonus(req: Request, res: Response) {
     // ✅ NO CONTENT RESPONSE (204)
     return res.status(HttpStatus.NO_CONTENT).send();
   } catch (err) {
-    console.error('Error deleting award bonus:', err);
+    logger.error('Error deleting award bonus', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,

@@ -1,5 +1,6 @@
 // src/controllers/ownership.ts - REFACTORED WITH STANDARDIZED RESPONSES
 import type { Request, Response, NextFunction } from 'express';
+import logger from '../config/logger.js';
 import { validationResult } from 'express-validator';
 import MovieOwnershipModel from '../models/MovieOwnership.js';
 import SeasonModel from '../models/Season.js';
@@ -131,7 +132,10 @@ async function createOwnership(req: Request, res: Response) {
         successResponse(ownership, undefined, 'Movie acquired successfully')
       );
   } catch (err) {
-    console.error('Error creating ownership:', err);
+    logger.error('Error creating ownership', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -198,7 +202,10 @@ async function getOwnershipsBySeason(req: Request, res: Response) {
     // ✅ PAGINATED RESPONSE
     return sendPaginatedResponse(res, items, { page, limit, total });
   } catch (err) {
-    console.error('Error fetching ownerships by season:', err);
+    logger.error('Error fetching ownerships by season', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -267,7 +274,10 @@ async function getOwnershipsByStudio(req: Request, res: Response) {
     // ✅ PAGINATED RESPONSE
     return sendPaginatedResponse(res, items, { page, limit, total });
   } catch (err) {
-    console.error('Error fetching ownerships by studio:', err);
+    logger.error('Error fetching ownerships by studio', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -333,7 +343,10 @@ async function retireOwnership(req: Request, res: Response) {
       'Movie ownership retired successfully'
     );
   } catch (err) {
-    console.error('Error retiring ownership:', err);
+    logger.error('Error retiring ownership', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return sendErrorResponse(
       res,
       HttpStatus.INTERNAL_SERVER_ERROR,
