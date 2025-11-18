@@ -2,6 +2,8 @@
 import type { Request, Response, NextFunction } from 'express';
 import logger from '../config/logger.js';
 import Studio from '../models/Studio.js';
+import StudioOwner from '../models/StudioOwner.js';
+import League from '../models/League.js';
 import {
   HttpStatus,
   parsePaginationParams,
@@ -97,13 +99,14 @@ async function getStudios(req: Request, res: Response) {
 }
 
 /**
- * Get single studio
+ * Get single studio with populated owner and league data
  * GET /leagues/:leagueId/studios/:studioId
  */
 async function getStudio(req: Request, res: Response) {
   try {
     const { leagueId, studioId } = req.params;
 
+    // Fetch studio
     const studio = await Studio.findOne({
       _id: studioId,
       leagueId, // ✅ Verify studio belongs to this league
@@ -114,8 +117,36 @@ async function getStudio(req: Request, res: Response) {
       return sendErrorResponse(res, HttpStatus.NOT_FOUND, 'Studio not found');
     }
 
+    // Fetch league information
+    const league = await League.findById(leagueId)
+      .select('name slug')
+      .lean();
+
+    // Fetch studio owners with user information populated
+    const studioOwners = await StudioOwner.find({
+      studioId: studio._id,
+    })
+      .populate('userId', 'firstName lastName email')
+      .lean();
+
+    // Enhance studio with additional data
+    // Filter out owners where user was deleted/not found
+    const enhancedStudio = {
+      ...studio,
+      league: league || null,
+      owners: studioOwners
+        .filter((so: any) => so.userId != null)
+        .map((so: any) => ({
+          userId: so.userId._id,
+          firstName: so.userId.firstName || '',
+          lastName: so.userId.lastName || '',
+          email: so.userId.email,
+          roleInStudio: so.roleInStudio,
+        })),
+    };
+
     // ✅ SUCCESS RESPONSE
-    return sendSuccessResponse(res, studio);
+    return sendSuccessResponse(res, enhancedStudio);
   } catch (err) {
     logger.error('Error fetching studio', {
       error: err instanceof Error ? err.message : 'Unknown error',
