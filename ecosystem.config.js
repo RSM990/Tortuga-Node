@@ -9,6 +9,7 @@ export default {
       env: {
         NODE_ENV: 'production',
         PORT: 3000,
+        LOG_LEVEL: 'info',
       },
     },
   ],
